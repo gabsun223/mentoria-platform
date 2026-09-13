@@ -26,14 +26,10 @@ export async function fetchBlockSummaries(goalIds) {
 export async function quickCompleteGoal(goal) {
   const nextCompleted = !goal.completed
 
-  if (nextCompleted) {
-    await supabase.from('goal_blocks').update({ completed: true }).eq('goal_id', goal.id)
-  }
-
-  const { error } = await supabase
-    .from('goals')
-    .update({ completed: nextCompleted })
-    .eq('id', goal.id)
+  const { error } = await supabase.rpc('set_goal_completion', {
+    p_goal_id: goal.id,
+    p_completed: nextCompleted,
+  })
 
   return error
 }

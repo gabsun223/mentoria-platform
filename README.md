@@ -32,6 +32,20 @@ banco de dados real (Supabase).
    `goal_blocks` (os blocos de estudo dentro de cada meta, com checklist,
    tópico e link de material — o que alimenta a tela de detalhe da meta).
 
+## 2.2 Rodar as migrações incrementais restantes
+
+Depois do `schema.sql` e da migração `0002`, execute, nesta ordem, todos os
+arquivos seguintes da pasta `supabase/migrations/`:
+
+1. `0003_profile_on_signup.sql` — cria o perfil automaticamente no cadastro;
+2. `0004_mentor_sees_unclaimed_students.sql` — permite ao mentor localizar e
+   vincular alunos ainda sem mentor;
+3. `0005_security_hardening.sql` — impede elevação indevida de papel, protege o
+   conteúdo das metas, valida resultados e torna cronômetro/conclusão atômicos.
+
+As migrações devem ser executadas em ordem. O frontend da versão atual depende
+das funções criadas pela `0005`.
+
 ## 3. Pegar as chaves da API
 
 1. No painel do Supabase, vá em **Project Settings > API**.

@@ -73,10 +73,15 @@ export default function GoalDetail() {
   const handleAddSeconds = async (delta) => {
     const current = goalRef.current
     if (!current) return
-    const newTotal = current.time_seconds + delta
-    goalRef.current = { ...current, time_seconds: newTotal }
-    setGoal(goalRef.current)
-    await supabase.from('goals').update({ time_seconds: newTotal }).eq('id', current.id)
+    const { data: newTotal, error } = await supabase.rpc('increment_goal_time', {
+      p_goal_id: current.id,
+      p_delta_seconds: delta,
+    })
+    if (!error && Number.isFinite(newTotal)) {
+      const latest = goalRef.current ?? current
+      goalRef.current = { ...latest, time_seconds: Math.max(latest.time_seconds, newTotal) }
+      setGoal(goalRef.current)
+    }
   }
 
   const toggleBlock = async (block) => {
@@ -108,11 +113,16 @@ export default function GoalDetail() {
     if (!goal) return
     setConcluding(true)
     const nextCompleted = !goal.completed
-    const { error } = await supabase
-      .from('goals')
-      .update({ completed: nextCompleted })
-      .eq('id', goal.id)
-    if (!error) setGoal((g) => ({ ...g, completed: nextCompleted }))
+    const { error } = await supabase.rpc('set_goal_completion', {
+      p_goal_id: goal.id,
+      p_completed: nextCompleted,
+    })
+    if (!error) {
+      setGoal((g) => ({ ...g, completed: nextCompleted }))
+      if (nextCompleted) {
+        setBlocks((prev) => prev.map((block) => ({ ...block, completed: true })))
+      }
+    }
     setConcluding(false)
   }
 
