@@ -42,6 +42,8 @@ arquivos seguintes da pasta `supabase/migrations/`:
    vincular alunos ainda sem mentor;
 3. `0005_security_hardening.sql` — impede elevação indevida de papel, protege o
    conteúdo das metas, valida resultados e torna cronômetro/conclusão atômicos.
+4. `0006_study_plans.sql` — cria planos paralelos, metas de tempo por matéria e
+   o vínculo opcional de cada meta a um plano.
 
 As migrações devem ser executadas em ordem. O frontend da versão atual depende
 das funções criadas pela `0005`.
@@ -142,6 +144,7 @@ src/
     GoalDetail.jsx          → detalhe de uma meta (blocos, cronômetro, material)
     ExamHistory.jsx         → "Histórico de Provas" + gráfico
     Profile.jsx             → "Perfil"
+    StudyPlans.jsx          → planos paralelos e visão combinada por matéria
     MentorPanel.jsx         → painel exclusivo do mentor
 supabase/schema.sql         → schema base + políticas de segurança (RLS)
 supabase/migrations/        → alterações incrementais (rodar em ordem, depois do schema base)

@@ -43,6 +43,14 @@ export default function Sidebar() {
         >
           Histórico de Provas
         </NavLink>
+        {!isMentor && (
+          <NavLink
+            to="/planos"
+            className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive}`}
+          >
+            Planos de Estudo
+          </NavLink>
+        )}
         <NavLink
           to="/perfil"
           className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive}`}

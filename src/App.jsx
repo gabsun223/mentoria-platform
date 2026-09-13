@@ -9,6 +9,7 @@ import GoalDetail from './pages/GoalDetail'
 import ExamHistory from './pages/ExamHistory'
 import Profile from './pages/Profile'
 import MentorPanel from './pages/MentorPanel'
+import StudyPlans from './pages/StudyPlans'
 
 function Layout({ children }) {
   return (
@@ -61,6 +62,16 @@ export default function App() {
           <ProtectedRoute>
             <Layout>
               <ExamHistory />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/planos"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <StudyPlans />
             </Layout>
           </ProtectedRoute>
         }
