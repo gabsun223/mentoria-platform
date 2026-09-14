@@ -43,7 +43,9 @@ arquivos seguintes da pasta `supabase/migrations/`:
 3. `0005_security_hardening.sql` — impede elevação indevida de papel, protege o
    conteúdo das metas, valida resultados e torna cronômetro/conclusão atômicos.
 4. `0006_study_plans.sql` — cria planos paralelos, metas de tempo por matéria e
-   o vínculo opcional de cada meta a um plano.
+   o vínculo opcional de cada meta a um plano. Mentor e aluno podem criar planos;
+   a meta de horas é acumulada durante todo o plano; planos sem uso ficam com
+   status `pending` e preservam seu histórico, sem exclusão.
 
 As migrações devem ser executadas em ordem. O frontend da versão atual depende
 das funções criadas pela `0005`.

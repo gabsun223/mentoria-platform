@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
-
-const emptyTarget = () => ({ subject: '', hours: '' })
+import StudyPlanForm from '../components/StudyPlanForm'
 
 function normalizeSubject(value) {
   return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR')
@@ -25,9 +24,6 @@ export default function StudyPlans() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [name, setName] = useState('')
-  const [targetRows, setTargetRows] = useState([emptyTarget()])
-  const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
   const load = useCallback(async () => {
@@ -61,7 +57,10 @@ export default function StudyPlans() {
     setSelectedIds((previous) => {
       const available = new Set(nextPlans.map((plan) => plan.id))
       const preserved = new Set([...previous].filter((id) => available.has(id)))
-      return preserved.size ? preserved : available
+      const active = new Set(
+        nextPlans.filter((plan) => plan.status === 'active').map((plan) => plan.id)
+      )
+      return preserved.size ? preserved : active
     })
     setLoading(false)
   }, [user])
@@ -79,69 +78,18 @@ export default function StudyPlans() {
     })
   }
 
-  const updateTarget = (index, field, value) => {
-    setTargetRows((previous) =>
-      previous.map((target, current) =>
-        current === index ? { ...target, [field]: value } : target
-      )
-    )
-  }
-
-  const removeTarget = (index) => {
-    setTargetRows((previous) =>
-      previous.length > 1 ? previous.filter((_, current) => current !== index) : previous
-    )
-  }
-
-  const handleCreate = async (event) => {
-    event.preventDefault()
-    setMessage(null)
-    const cleanTargets = targetRows
-      .map((target) => ({
-        subject: target.subject.trim().replace(/\s+/g, ' '),
-        target_seconds: Math.round(Number(target.hours) * 3600),
-      }))
-      .filter((target) => target.subject && target.target_seconds > 0)
-
-    if (!name.trim() || !cleanTargets.length) {
-      setMessage({ type: 'error', text: 'Informe o nome e ao menos uma matéria com horas.' })
-      return
-    }
-
-    const uniqueSubjects = new Set(cleanTargets.map((target) => normalizeSubject(target.subject)))
-    if (uniqueSubjects.size !== cleanTargets.length) {
-      setMessage({ type: 'error', text: 'Não repita a mesma matéria dentro do plano.' })
-      return
-    }
-
-    setSaving(true)
-    const { error } = await supabase.rpc('create_study_plan', {
-      p_name: name.trim(),
-      p_targets: cleanTargets,
-    })
-    setSaving(false)
-
-    if (error) {
-      setMessage({ type: 'error', text: error.message })
-      return
-    }
-
-    setName('')
-    setTargetRows([emptyTarget()])
-    setShowForm(false)
-    setMessage({ type: 'success', text: 'Plano criado com sucesso.' })
-    load()
-  }
-
-  const handleDelete = async (plan) => {
-    const confirmed = window.confirm(
-      `Excluir o plano “${plan.name}”? As metas continuarão existindo, mas ficarão sem plano.`
-    )
-    if (!confirmed) return
-    const { error } = await supabase.from('study_plans').delete().eq('id', plan.id)
+  const handleStatusChange = async (plan) => {
+    const nextStatus = plan.status === 'active' ? 'pending' : 'active'
+    const { error } = await supabase
+      .from('study_plans')
+      .update({ status: nextStatus })
+      .eq('id', plan.id)
     if (error) setMessage({ type: 'error', text: error.message })
     else {
-      setMessage({ type: 'success', text: 'Plano excluído.' })
+      setMessage({
+        type: 'success',
+        text: nextStatus === 'pending' ? 'Plano marcado como pendente.' : 'Plano reativado.',
+      })
       load()
     }
   }
@@ -178,7 +126,7 @@ export default function StudyPlans() {
           <p className="font-mono text-[11px] text-ink-muted tracking-wide">CONTROLE DE ESTUDOS</p>
           <h1 className="font-serif text-3xl font-semibold text-ink">Planos de Estudo</h1>
           <p className="text-sm text-ink-muted mt-1">
-            Compare planos paralelos e acompanhe o tempo real por matéria.
+            Acompanhe o tempo acumulado por matéria do início até a conclusão de cada plano.
           </p>
         </div>
         <button
@@ -202,75 +150,17 @@ export default function StudyPlans() {
       )}
 
       {showForm && (
-        <form
-          onSubmit={handleCreate}
-          className="mb-6 bg-white/60 border border-paper-dark rounded-md p-5 space-y-4"
-        >
-          <div>
-            <label className="text-xs text-ink-muted">Nome do plano</label>
-            <input
-              required
-              maxLength={120}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Ex.: PGM Manaus"
-              className="mt-1 w-full rounded border border-paper-dark bg-white px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-mono text-[11px] text-ink-muted tracking-wide">
-              METAS DE TEMPO POR MATÉRIA
-            </p>
-            {targetRows.map((target, index) => (
-              <div key={index} className="grid grid-cols-1 sm:grid-cols-[1fr_7rem_auto] gap-2">
-                <input
-                  required
-                  maxLength={120}
-                  value={target.subject}
-                  onChange={(event) => updateTarget(index, 'subject', event.target.value)}
-                  placeholder="Direito Constitucional"
-                  className="rounded border border-paper-dark bg-white px-3 py-2 text-sm"
-                />
-                <input
-                  required
-                  type="number"
-                  min="0.25"
-                  max="1000"
-                  step="0.25"
-                  value={target.hours}
-                  onChange={(event) => updateTarget(index, 'hours', event.target.value)}
-                  placeholder="Horas"
-                  className="rounded border border-paper-dark bg-white px-3 py-2 text-sm"
-                />
-                <button
-                  type="button"
-                  disabled={targetRows.length === 1}
-                  onClick={() => removeTarget(index)}
-                  className="px-2 text-ink-muted hover:text-selo-vermelho disabled:opacity-30"
-                  aria-label="Remover matéria"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setTargetRows((previous) => [...previous, emptyTarget()])}
-              className="text-xs font-medium text-ink-muted hover:text-ink"
-            >
-              + Adicionar matéria
-            </button>
-          </div>
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="bg-ink text-paper text-sm font-medium py-2 px-4 rounded hover:bg-ink-light transition-colors disabled:opacity-60"
-          >
-            {saving ? 'Salvando...' : 'Criar plano'}
-          </button>
-        </form>
+        <div className="mb-6">
+          <StudyPlanForm
+            studentId={user.id}
+            onCancel={() => setShowForm(false)}
+            onCreated={() => {
+              setShowForm(false)
+              setMessage({ type: 'success', text: 'Plano criado com sucesso.' })
+              load()
+            }}
+          />
+        </div>
       )}
 
       {loading ? (
@@ -298,7 +188,7 @@ export default function StudyPlans() {
                     selectedIds.has(plan.id)
                       ? 'border-ink bg-white/70'
                       : 'border-paper-dark bg-white/30'
-                  }`}
+                  } ${plan.status === 'pending' ? 'opacity-70' : ''}`}
                 >
                   <label className="flex items-start gap-2 cursor-pointer">
                     <input
@@ -312,13 +202,22 @@ export default function StudyPlans() {
                       <span className="text-[11px] font-mono text-ink-muted">
                         {planTargets.length} matérias · {formatDuration(total)}
                       </span>
+                      <span
+                        className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-mono ${
+                          plan.status === 'pending'
+                            ? 'bg-selo-ambar-bg text-selo-ambar'
+                            : 'bg-selo-verde-bg text-selo-verde'
+                        }`}
+                      >
+                        {plan.status === 'pending' ? 'PENDENTE' : 'ATIVO'}
+                      </span>
                     </span>
                   </label>
                   <button
-                    onClick={() => handleDelete(plan)}
-                    className="mt-2 ml-6 text-[11px] text-ink-muted hover:text-selo-vermelho"
+                    onClick={() => handleStatusChange(plan)}
+                    className="mt-2 ml-6 text-[11px] text-ink-muted hover:text-ink"
                   >
-                    Excluir
+                    {plan.status === 'pending' ? 'Reativar' : 'Marcar como pendente'}
                   </button>
                 </div>
               )

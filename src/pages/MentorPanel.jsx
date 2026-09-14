@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import ProgressChart from '../components/ProgressChart'
+import StudyPlanForm from '../components/StudyPlanForm'
 import { PILLAR_ORDER, pillarOf } from '../lib/pillars'
 import { fetchBlockSummaries } from '../lib/goalActions'
 
@@ -27,6 +28,7 @@ export default function MentorPanel() {
   })
   const [blocksForm, setBlocksForm] = useState([emptyBlock()])
   const [saving, setSaving] = useState(false)
+  const [showPlanForm, setShowPlanForm] = useState(false)
 
   const loadAlunos = useCallback(async () => {
     setLoading(true)
@@ -53,6 +55,7 @@ export default function MentorPanel() {
 
   const loadAlunoDetalhe = async (aluno) => {
     setSelecionado(aluno)
+    setShowPlanForm(false)
     setForm((previous) => ({ ...previous, plan_id: '' }))
     const [{ data: g }, { data: e }, { data: plans }] = await Promise.all([
       supabase
@@ -68,7 +71,7 @@ export default function MentorPanel() {
         .order('exam_date', { ascending: false }),
       supabase
         .from('study_plans')
-        .select('id, name')
+        .select('id, name, status')
         .eq('student_id', aluno.id)
         .order('created_at', { ascending: true }),
     ])
@@ -123,6 +126,17 @@ export default function MentorPanel() {
       loadAlunoDetalhe(selecionado)
     }
     setSaving(false)
+  }
+
+  const handlePlanStatusChange = async (plan) => {
+    if (!selecionado) return
+    const nextStatus = plan.status === 'active' ? 'pending' : 'active'
+    const { error } = await supabase
+      .from('study_plans')
+      .update({ status: nextStatus })
+      .eq('id', plan.id)
+
+    if (!error) loadAlunoDetalhe(selecionado)
   }
 
   if (loading) return <p className="text-sm text-ink-muted font-mono">Carregando painel...</p>
@@ -200,6 +214,54 @@ export default function MentorPanel() {
                 </h2>
               </div>
 
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowPlanForm((visible) => !visible)}
+                  className="border border-ink text-ink text-sm font-medium py-2 px-4 rounded hover:bg-white/70 transition-colors"
+                >
+                  {showPlanForm ? 'Cancelar novo plano' : '+ Novo plano para este aluno'}
+                </button>
+              </div>
+
+              {showPlanForm && (
+                <StudyPlanForm
+                  studentId={selecionado.id}
+                  onCancel={() => setShowPlanForm(false)}
+                  onCreated={() => loadAlunoDetalhe(selecionado)}
+                />
+              )}
+
+              {studentPlans.length > 0 && (
+                <div className="border border-paper-dark rounded-md overflow-hidden">
+                  <p className="px-4 py-2 text-[11px] font-mono text-ink-muted tracking-wide bg-white/40">
+                    PLANOS DE ESTUDO
+                  </p>
+                  <div className="divide-y divide-paper-dark">
+                    {studentPlans.map((plan) => (
+                      <div
+                        key={plan.id}
+                        className="flex items-center justify-between gap-3 px-4 py-2.5 bg-white/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-ink truncate">{plan.name}</p>
+                          <p className="text-[10px] font-mono text-ink-muted">
+                            {plan.status === 'pending' ? 'PENDENTE' : 'ATIVO'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handlePlanStatusChange(plan)}
+                          className="text-[11px] text-ink-muted hover:text-ink shrink-0"
+                        >
+                          {plan.status === 'pending' ? 'Reativar' : 'Marcar como pendente'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <ProgressChart exams={exams} />
 
               <form
@@ -238,11 +300,13 @@ export default function MentorPanel() {
                     className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
                   >
                     <option value="">Sem plano de estudo</option>
-                    {studentPlans.map((plan) => (
-                      <option key={plan.id} value={plan.id}>
-                        {plan.name}
-                      </option>
-                    ))}
+                    {studentPlans
+                      .filter((plan) => plan.status === 'active')
+                      .map((plan) => (
+                        <option key={plan.id} value={plan.id}>
+                          {plan.name}
+                        </option>
+                      ))}
                   </select>
                   <input
                     type="date"

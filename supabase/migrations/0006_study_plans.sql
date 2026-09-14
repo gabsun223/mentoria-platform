@@ -7,6 +7,7 @@ create table public.study_plans (
   id uuid primary key default gen_random_uuid(),
   student_id uuid not null references public.profiles(id) on delete cascade,
   name text not null check (char_length(btrim(name)) between 1 and 120),
+  status text not null default 'active' check (status in ('active', 'pending')),
   created_at timestamptz not null default now()
 );
 
@@ -57,13 +58,43 @@ create trigger validate_goal_plan_trigger
 alter table public.study_plans enable row level security;
 alter table public.study_plan_targets enable row level security;
 
-create policy "study_plans_student_manages_own"
-on public.study_plans for all
+create policy "study_plans_student_selects_own"
+on public.study_plans for select
+using (student_id = auth.uid() and not public.is_mentor(auth.uid()));
+
+create policy "study_plans_student_inserts_own"
+on public.study_plans for insert
+with check (student_id = auth.uid() and not public.is_mentor(auth.uid()));
+
+create policy "study_plans_student_updates_own"
+on public.study_plans for update
 using (student_id = auth.uid() and not public.is_mentor(auth.uid()))
 with check (student_id = auth.uid() and not public.is_mentor(auth.uid()));
 
-create policy "study_plans_mentor_manages_students"
-on public.study_plans for all
+create policy "study_plans_mentor_selects_students"
+on public.study_plans for select
+using (
+  exists (
+    select 1 from public.profiles p
+    where p.id = study_plans.student_id
+      and p.mentor_id = auth.uid()
+      and public.is_mentor(auth.uid())
+  )
+);
+
+create policy "study_plans_mentor_inserts_students"
+on public.study_plans for insert
+with check (
+  exists (
+    select 1 from public.profiles p
+    where p.id = study_plans.student_id
+      and p.mentor_id = auth.uid()
+      and public.is_mentor(auth.uid())
+  )
+);
+
+create policy "study_plans_mentor_updates_students"
+on public.study_plans for update
 using (
   exists (
     select 1 from public.profiles p
@@ -118,7 +149,8 @@ with check (
 -- Cria o plano e todas as metas de tempo em uma única transação.
 create or replace function public.create_study_plan(
   p_name text,
-  p_targets jsonb
+  p_targets jsonb,
+  p_student_id uuid default null
 )
 returns uuid
 language plpgsql
@@ -131,13 +163,27 @@ declare
   v_subject text;
   v_seconds integer;
   v_position integer := 0;
+  v_student_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'Autenticação obrigatória.';
   end if;
 
-  if public.is_mentor(auth.uid()) then
-    raise exception 'A criação direta de plano está disponível apenas para alunos.';
+  v_student_id := coalesce(p_student_id, auth.uid());
+
+  if v_student_id <> auth.uid() and not exists (
+    select 1
+    from public.profiles p
+    where p.id = v_student_id
+      and p.role = 'student'
+      and p.mentor_id = auth.uid()
+      and public.is_mentor(auth.uid())
+  ) then
+    raise exception 'Você não pode criar um plano para este aluno.';
+  end if;
+
+  if v_student_id = auth.uid() and public.is_mentor(auth.uid()) then
+    raise exception 'Selecione um aluno vinculado para criar o plano.';
   end if;
 
   if p_name is null or char_length(btrim(p_name)) not between 1 and 120 then
@@ -149,7 +195,7 @@ begin
   end if;
 
   insert into public.study_plans (student_id, name)
-  values (auth.uid(), btrim(p_name))
+  values (v_student_id, btrim(p_name))
   returning id into v_plan_id;
 
   for v_target in select value from jsonb_array_elements(p_targets)
@@ -173,5 +219,5 @@ begin
 end;
 $$;
 
-revoke all on function public.create_study_plan(text, jsonb) from public;
-grant execute on function public.create_study_plan(text, jsonb) to authenticated;
+revoke all on function public.create_study_plan(text, jsonb, uuid) from public;
+grant execute on function public.create_study_plan(text, jsonb, uuid) to authenticated;
