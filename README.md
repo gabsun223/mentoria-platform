@@ -32,6 +32,24 @@ banco de dados real (Supabase).
    `goal_blocks` (os blocos de estudo dentro de cada meta, com checklist,
    tópico e link de material — o que alimenta a tela de detalhe da meta).
 
+## 2.2 Rodar as migrações incrementais restantes
+
+Depois do `schema.sql` e da migração `0002`, execute, nesta ordem, todos os
+arquivos seguintes da pasta `supabase/migrations/`:
+
+1. `0003_profile_on_signup.sql` — cria o perfil automaticamente no cadastro;
+2. `0004_mentor_sees_unclaimed_students.sql` — permite ao mentor localizar e
+   vincular alunos ainda sem mentor;
+3. `0005_security_hardening.sql` — impede elevação indevida de papel, protege o
+   conteúdo das metas, valida resultados e torna cronômetro/conclusão atômicos.
+4. `0006_study_plans.sql` — cria planos paralelos, metas de tempo por matéria e
+   o vínculo opcional de cada meta a um plano. Mentor e aluno podem criar planos;
+   a meta de horas é acumulada durante todo o plano; planos sem uso ficam com
+   status `pending` e preservam seu histórico, sem exclusão.
+
+As migrações devem ser executadas em ordem. O frontend da versão atual depende
+das funções criadas pela `0005`.
+
 ## 3. Pegar as chaves da API
 
 1. No painel do Supabase, vá em **Project Settings > API**.
@@ -128,6 +146,7 @@ src/
     GoalDetail.jsx          → detalhe de uma meta (blocos, cronômetro, material)
     ExamHistory.jsx         → "Histórico de Provas" + gráfico
     Profile.jsx             → "Perfil"
+    StudyPlans.jsx          → planos paralelos e visão combinada por matéria
     MentorPanel.jsx         → painel exclusivo do mentor
 supabase/schema.sql         → schema base + políticas de segurança (RLS)
 supabase/migrations/        → alterações incrementais (rodar em ordem, depois do schema base)

@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
+import { format } from 'date-fns'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import ProgressChart from '../components/ProgressChart'
+import StudyPlanForm from '../components/StudyPlanForm'
 import { PILLAR_ORDER, pillarOf } from '../lib/pillars'
 import { fetchBlockSummaries } from '../lib/goalActions'
 
@@ -15,15 +17,18 @@ export default function MentorPanel() {
   const [goals, setGoals] = useState([])
   const [blockSummaries, setBlockSummaries] = useState({})
   const [exams, setExams] = useState([])
+  const [studentPlans, setStudentPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({
     title: '',
     pillar: 'leitura',
     category: '',
-    due_date: new Date().toISOString().slice(0, 10),
+    plan_id: '',
+    due_date: format(new Date(), 'yyyy-MM-dd'),
   })
   const [blocksForm, setBlocksForm] = useState([emptyBlock()])
   const [saving, setSaving] = useState(false)
+  const [showPlanForm, setShowPlanForm] = useState(false)
 
   const loadAlunos = useCallback(async () => {
     setLoading(true)
@@ -50,7 +55,9 @@ export default function MentorPanel() {
 
   const loadAlunoDetalhe = async (aluno) => {
     setSelecionado(aluno)
-    const [{ data: g }, { data: e }] = await Promise.all([
+    setShowPlanForm(false)
+    setForm((previous) => ({ ...previous, plan_id: '' }))
+    const [{ data: g }, { data: e }, { data: plans }] = await Promise.all([
       supabase
         .from('goals')
         .select('*')
@@ -62,9 +69,15 @@ export default function MentorPanel() {
         .select('*')
         .eq('student_id', aluno.id)
         .order('exam_date', { ascending: false }),
+      supabase
+        .from('study_plans')
+        .select('id, name, status')
+        .eq('student_id', aluno.id)
+        .order('created_at', { ascending: true }),
     ])
     setGoals(g ?? [])
     setExams(e ?? [])
+    setStudentPlans(plans ?? [])
     setBlockSummaries(await fetchBlockSummaries((g ?? []).map((goal) => goal.id)))
   }
 
@@ -89,6 +102,7 @@ export default function MentorPanel() {
         title: form.title,
         pillar: form.pillar,
         category: form.category || null,
+        plan_id: form.plan_id || null,
         due_date: form.due_date,
       })
       .select()
@@ -107,11 +121,22 @@ export default function MentorPanel() {
       if (blocksToInsert.length) {
         await supabase.from('goal_blocks').insert(blocksToInsert)
       }
-      setForm({ ...form, title: '', category: '' })
+      setForm({ ...form, title: '', category: '', plan_id: '' })
       setBlocksForm([emptyBlock()])
       loadAlunoDetalhe(selecionado)
     }
     setSaving(false)
+  }
+
+  const handlePlanStatusChange = async (plan) => {
+    if (!selecionado) return
+    const nextStatus = plan.status === 'active' ? 'pending' : 'active'
+    const { error } = await supabase
+      .from('study_plans')
+      .update({ status: nextStatus })
+      .eq('id', plan.id)
+
+    if (!error) loadAlunoDetalhe(selecionado)
   }
 
   if (loading) return <p className="text-sm text-ink-muted font-mono">Carregando painel...</p>
@@ -189,6 +214,54 @@ export default function MentorPanel() {
                 </h2>
               </div>
 
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowPlanForm((visible) => !visible)}
+                  className="border border-ink text-ink text-sm font-medium py-2 px-4 rounded hover:bg-white/70 transition-colors"
+                >
+                  {showPlanForm ? 'Cancelar novo plano' : '+ Novo plano para este aluno'}
+                </button>
+              </div>
+
+              {showPlanForm && (
+                <StudyPlanForm
+                  studentId={selecionado.id}
+                  onCancel={() => setShowPlanForm(false)}
+                  onCreated={() => loadAlunoDetalhe(selecionado)}
+                />
+              )}
+
+              {studentPlans.length > 0 && (
+                <div className="border border-paper-dark rounded-md overflow-hidden">
+                  <p className="px-4 py-2 text-[11px] font-mono text-ink-muted tracking-wide bg-white/40">
+                    PLANOS DE ESTUDO
+                  </p>
+                  <div className="divide-y divide-paper-dark">
+                    {studentPlans.map((plan) => (
+                      <div
+                        key={plan.id}
+                        className="flex items-center justify-between gap-3 px-4 py-2.5 bg-white/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm text-ink truncate">{plan.name}</p>
+                          <p className="text-[10px] font-mono text-ink-muted">
+                            {plan.status === 'pending' ? 'PENDENTE' : 'ATIVO'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handlePlanStatusChange(plan)}
+                          className="text-[11px] text-ink-muted hover:text-ink shrink-0"
+                        >
+                          {plan.status === 'pending' ? 'Reativar' : 'Marcar como pendente'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <ProgressChart exams={exams} />
 
               <form
@@ -203,7 +276,7 @@ export default function MentorPanel() {
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   className="w-full rounded border border-paper-dark bg-white px-3 py-2 text-sm"
                 />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <select
                     value={form.pillar}
                     onChange={(e) => setForm({ ...form, pillar: e.target.value })}
@@ -221,6 +294,20 @@ export default function MentorPanel() {
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
                     className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
                   />
+                  <select
+                    value={form.plan_id}
+                    onChange={(e) => setForm({ ...form, plan_id: e.target.value })}
+                    className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
+                  >
+                    <option value="">Sem plano de estudo</option>
+                    {studentPlans
+                      .filter((plan) => plan.status === 'active')
+                      .map((plan) => (
+                        <option key={plan.id} value={plan.id}>
+                          {plan.name}
+                        </option>
+                      ))}
+                  </select>
                   <input
                     type="date"
                     required

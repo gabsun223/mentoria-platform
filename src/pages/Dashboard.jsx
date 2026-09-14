@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
+import { format } from 'date-fns'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import GoalItem from '../components/GoalItem'
 import { fetchBlockSummaries, quickCompleteGoal } from '../lib/goalActions'
 
 function todayISO() {
-  const d = new Date()
-  return d.toISOString().slice(0, 10)
+  return format(new Date(), 'yyyy-MM-dd')
 }
 
 export default function Dashboard() {
