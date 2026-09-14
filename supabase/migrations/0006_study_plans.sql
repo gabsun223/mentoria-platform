@@ -219,5 +219,5 @@ begin
 end;
 $$;
 
-revoke all on function public.create_study_plan(text, jsonb, uuid) from public;
+revoke all on function public.create_study_plan(text, jsonb, uuid) from public, anon;
 grant execute on function public.create_study_plan(text, jsonb, uuid) to authenticated;

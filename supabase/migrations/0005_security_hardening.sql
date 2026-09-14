@@ -326,7 +326,7 @@ begin
 end;
 $$;
 
-revoke all on function public.increment_goal_time(uuid, integer) from public;
-revoke all on function public.set_goal_completion(uuid, boolean) from public;
+revoke all on function public.increment_goal_time(uuid, integer) from public, anon;
+revoke all on function public.set_goal_completion(uuid, boolean) from public, anon;
 grant execute on function public.increment_goal_time(uuid, integer) to authenticated;
 grant execute on function public.set_goal_completion(uuid, boolean) to authenticated;
