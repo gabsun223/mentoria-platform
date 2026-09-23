@@ -1,4 +1,5 @@
-import { Routes, Route } from 'react-router-dom'
+import { useAuth } from './context/AuthContext'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import Sidebar from './components/Sidebar'
 import Login from './pages/Login'
@@ -19,6 +20,11 @@ function Layout({ children }) {
   )
 }
 
+function StudentPage({ children }) {
+ const { profile } = useAuth()
+ return profile?.role === 'mentor' ? <Navigate to='/mentor' replace /> : children
+}
+
 export default function App() {
   return (
     <Routes>
@@ -30,7 +36,7 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Layout>
-              <Dashboard />
+              <StudentPage><Dashboard /></StudentPage>
             </Layout>
           </ProtectedRoute>
         }
@@ -40,7 +46,7 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Layout>
-              <WeekView />
+              <StudentPage><WeekView /></StudentPage>
             </Layout>
           </ProtectedRoute>
         }
@@ -60,7 +66,7 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Layout>
-              <ExamHistory />
+              <StudentPage><ExamHistory /></StudentPage>
             </Layout>
           </ProtectedRoute>
         }

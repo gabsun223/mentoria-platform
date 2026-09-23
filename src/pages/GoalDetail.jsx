@@ -8,7 +8,8 @@ import { pillarOf } from '../lib/pillars'
 export default function GoalDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const isMentor = profile?.role === 'mentor'
 
   const [goal, setGoal] = useState(null)
   const [blocks, setBlocks] = useState([])
@@ -49,7 +50,7 @@ export default function GoalDetail() {
     const { data: allGoals } = await supabase
       .from('goals')
       .select('id, due_date, created_at')
-      .eq('student_id', user.id)
+      .eq('student_id', goalData.student_id)
       .order('due_date', { ascending: true })
       .order('created_at', { ascending: true })
 
@@ -124,7 +125,7 @@ export default function GoalDetail() {
     return (
       <div className="max-w-2xl">
         <p className="text-sm text-ink-muted">Meta não encontrada.</p>
-        <Link to="/semana" className="text-sm text-ink underline mt-2 inline-block">
+        <Link to={isMentor ? "/mentor" : "/semana"} className="text-sm text-ink underline mt-2 inline-block">
           Voltar ao cronograma
         </Link>
       </div>
@@ -139,8 +140,8 @@ export default function GoalDetail() {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-4">
-        <Link to="/semana" className="text-sm text-ink-muted hover:text-ink flex items-center gap-1">
-          ← Voltar ao Cronograma
+        <Link to={isMentor ? "/mentor" : "/semana"} className="text-sm text-ink-muted hover:text-ink flex items-center gap-1">
+          ← {isMentor ? 'Voltar aos alunos' : 'Voltar ao Cronograma'}
         </Link>
         <div className="flex items-center gap-2 text-xs font-mono text-ink-muted">
           <button
@@ -195,7 +196,7 @@ export default function GoalDetail() {
       </div>
 
       <div className="mb-4">
-        <StudyTimer totalSeconds={goal.time_seconds} onAddSeconds={handleAddSeconds} />
+        {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer totalSeconds={goal.time_seconds} onAddSeconds={handleAddSeconds} />}
       </div>
 
       <div className="mb-4">
@@ -211,7 +212,7 @@ export default function GoalDetail() {
               <div key={block.id} className="border border-paper-dark rounded-md bg-white/60 overflow-hidden">
                 <button
                   onClick={() => toggleBlock(block)}
-                  disabled={savingBlockId === block.id}
+                  disabled={isMentor || savingBlockId === block.id}
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
                 >
                   <div className="min-w-0">
@@ -261,7 +262,7 @@ export default function GoalDetail() {
         )}
       </div>
 
-      <div className="border border-paper-dark rounded-md p-4">
+      {!isMentor && <div className="border border-paper-dark rounded-md p-4">
         <p className="font-mono text-[11px] text-ink-muted tracking-wide mb-2">CONCLUIR META</p>
         <button
           onClick={toggleGoalCompleted}
@@ -280,7 +281,7 @@ export default function GoalDetail() {
             ? '✓ Concluir Meta'
             : 'Marque todos os blocos para concluir'}
         </button>
-      </div>
+      </div>}
     </div>
   )
 }

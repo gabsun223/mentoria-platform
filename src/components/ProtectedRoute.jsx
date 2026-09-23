@@ -14,6 +14,8 @@ export default function ProtectedRoute({ children, requireRole }) {
 
   if (!user) return <Navigate to="/login" replace />
 
+  if (!profile) return <div className="p-8"><p>Não foi possível carregar seu perfil.</p><button onClick={() => window.location.reload()}>Tentar novamente</button></div>
+
   if (requireRole && profile?.role !== requireRole) {
     return <Navigate to="/" replace />
   }

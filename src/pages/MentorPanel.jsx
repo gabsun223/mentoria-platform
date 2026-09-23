@@ -1,330 +1,92 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import ProgressChart from '../components/ProgressChart'
 import { PILLAR_ORDER, pillarOf } from '../lib/pillars'
-import { fetchBlockSummaries } from '../lib/goalActions'
-
-const emptyBlock = () => ({ title: '', topic: '', material_url: '' })
-
+const blank = () => ({ title: '', category: '', pillar: 'leitura', due_date: new Date().toLocaleDateString('en-CA') })
+const inputClass = 'w-full border border-paper-dark rounded bg-white p-2 text-sm'
 export default function MentorPanel() {
-  const { user } = useAuth()
-  const [meusAlunos, setMeusAlunos] = useState([])
-  const [semMentor, setSemMentor] = useState([])
-  const [selecionado, setSelecionado] = useState(null)
-  const [goals, setGoals] = useState([])
-  const [blockSummaries, setBlockSummaries] = useState({})
-  const [exams, setExams] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({
-    title: '',
-    pillar: 'leitura',
-    category: '',
-    due_date: new Date().toISOString().slice(0, 10),
-  })
-  const [blocksForm, setBlocksForm] = useState([emptyBlock()])
-  const [saving, setSaving] = useState(false)
-
-  const loadAlunos = useCallback(async () => {
-    setLoading(true)
-    const [{ data: meus }, { data: livres }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('mentor_id', user.id).eq('role', 'student'),
-      supabase.from('profiles').select('*').is('mentor_id', null).eq('role', 'student'),
-    ])
-    setMeusAlunos(meus ?? [])
-    setSemMentor(livres ?? [])
-    setLoading(false)
-  }, [user])
-
-  useEffect(() => {
-    loadAlunos()
-  }, [loadAlunos])
-
-  const claimStudent = async (studentId) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ mentor_id: user.id })
-      .eq('id', studentId)
-    if (!error) loadAlunos()
-  }
-
-  const loadAlunoDetalhe = async (aluno) => {
-    setSelecionado(aluno)
-    const [{ data: g }, { data: e }] = await Promise.all([
-      supabase
-        .from('goals')
-        .select('*')
-        .eq('student_id', aluno.id)
-        .order('due_date', { ascending: false })
-        .limit(15),
-      supabase
-        .from('exam_history')
-        .select('*')
-        .eq('student_id', aluno.id)
-        .order('exam_date', { ascending: false }),
-    ])
-    setGoals(g ?? [])
-    setExams(e ?? [])
-    setBlockSummaries(await fetchBlockSummaries((g ?? []).map((goal) => goal.id)))
-  }
-
-  const updateBlockRow = (idx, field, value) => {
-    setBlocksForm((prev) => prev.map((b, i) => (i === idx ? { ...b, [field]: value } : b)))
-  }
-
-  const addBlockRow = () => setBlocksForm((prev) => [...prev, emptyBlock()])
-
-  const removeBlockRow = (idx) =>
-    setBlocksForm((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev))
-
-  const handleAddGoal = async (e) => {
-    e.preventDefault()
-    if (!selecionado) return
-    setSaving(true)
-
-    const { data: newGoal, error } = await supabase
-      .from('goals')
-      .insert({
-        student_id: selecionado.id,
-        title: form.title,
-        pillar: form.pillar,
-        category: form.category || null,
-        due_date: form.due_date,
-      })
-      .select()
-      .single()
-
-    if (!error && newGoal) {
-      const blocksToInsert = blocksForm
-        .filter((b) => b.title.trim())
-        .map((b, i) => ({
-          goal_id: newGoal.id,
-          title: b.title.trim(),
-          topic: b.topic.trim() || null,
-          material_url: b.material_url.trim() || null,
-          position: i,
-        }))
-      if (blocksToInsert.length) {
-        await supabase.from('goal_blocks').insert(blocksToInsert)
-      }
-      setForm({ ...form, title: '', category: '' })
-      setBlocksForm([emptyBlock()])
-      loadAlunoDetalhe(selecionado)
-    }
-    setSaving(false)
-  }
-
-  if (loading) return <p className="text-sm text-ink-muted font-mono">Carregando painel...</p>
-
-  return (
-    <div className="max-w-5xl">
-      <h1 className="font-serif text-3xl font-semibold text-ink mb-6">Painel do Mentor</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Coluna de alunos */}
-        <div className="md:col-span-1 space-y-6">
-          <div>
-            <p className="font-mono text-[11px] text-ink-muted tracking-wide mb-2">
-              MEUS ALUNOS ({meusAlunos.length})
-            </p>
-            <div className="space-y-1">
-              {meusAlunos.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => loadAlunoDetalhe(a)}
-                  className={`w-full text-left px-3 py-2 rounded text-sm border ${
-                    selecionado?.id === a.id
-                      ? 'bg-ink text-paper border-ink'
-                      : 'bg-white/60 border-paper-dark hover:border-ink-light'
-                  }`}
-                >
-                  {a.full_name}
-                </button>
-              ))}
-              {meusAlunos.length === 0 && (
-                <p className="text-xs text-ink-muted">Nenhum aluno vinculado ainda.</p>
-              )}
-            </div>
-          </div>
-
-          {semMentor.length > 0 && (
-            <div>
-              <p className="font-mono text-[11px] text-ink-muted tracking-wide mb-2">
-                CADASTRADOS SEM MENTOR
-              </p>
-              <div className="space-y-1">
-                {semMentor.map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between px-3 py-2 rounded text-sm bg-selo-ambar-bg border border-selo-ambar/30"
-                  >
-                    <span className="truncate">{a.full_name}</span>
-                    <button
-                      onClick={() => claimStudent(a.id)}
-                      className="text-[11px] font-medium text-selo-ambar hover:underline shrink-0 ml-2"
-                    >
-                      Vincular
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Detalhe do aluno selecionado */}
-        <div className="md:col-span-2">
-          {!selecionado ? (
-            <div className="border border-dashed border-paper-dark rounded-md p-10 text-center text-ink-muted text-sm">
-              Selecione um aluno pra lançar metas e ver a evolução.
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div>
-                <p className="font-mono text-[11px] text-ink-muted tracking-wide">
-                  ACOMPANHAMENTO
-                </p>
-                <h2 className="font-serif text-2xl font-semibold text-ink">
-                  {selecionado.full_name}
-                </h2>
-              </div>
-
-              <ProgressChart exams={exams} />
-
-              <form
-                onSubmit={handleAddGoal}
-                className="bg-white/60 border border-paper-dark rounded-md p-4 space-y-3"
-              >
-                <p className="text-xs font-mono text-ink-muted tracking-wide">NOVA META</p>
-                <input
-                  required
-                  placeholder="Título da meta (ex: PDF - Teoria - Direito Ambiental)"
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  className="w-full rounded border border-paper-dark bg-white px-3 py-2 text-sm"
-                />
-                <div className="grid grid-cols-3 gap-2">
-                  <select
-                    value={form.pillar}
-                    onChange={(e) => setForm({ ...form, pillar: e.target.value })}
-                    className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
-                  >
-                    {PILLAR_ORDER.map((key) => (
-                      <option key={key} value={key}>
-                        {pillarOf(key).glyph} {pillarOf(key).label}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    placeholder="Disciplina (ex: Direito Constitucional)"
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
-                  />
-                  <input
-                    type="date"
-                    required
-                    value={form.due_date}
-                    onChange={(e) => setForm({ ...form, due_date: e.target.value })}
-                    className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
-                  />
-                </div>
-
-                <div className="border-t border-paper-dark pt-3 space-y-2">
-                  <p className="text-[11px] font-mono text-ink-muted tracking-wide">
-                    BLOCOS DE ESTUDO (opcional — a meta só fecha quando todos forem marcados)
-                  </p>
-                  {blocksForm.map((block, i) => (
-                    <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
-                      <input
-                        placeholder="Bloco (ex: Teoria)"
-                        value={block.title}
-                        onChange={(e) => updateBlockRow(i, 'title', e.target.value)}
-                        className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
-                      />
-                      <input
-                        placeholder="Tópico (ex: CF, art. 14 e 17)"
-                        value={block.topic}
-                        onChange={(e) => updateBlockRow(i, 'topic', e.target.value)}
-                        className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
-                      />
-                      <input
-                        placeholder="Link do material"
-                        value={block.material_url}
-                        onChange={(e) => updateBlockRow(i, 'material_url', e.target.value)}
-                        className="rounded border border-paper-dark bg-white px-2 py-1.5 text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeBlockRow(i)}
-                        disabled={blocksForm.length === 1}
-                        className="text-ink-muted hover:text-selo-vermelho disabled:opacity-30 px-2"
-                        aria-label="Remover bloco"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addBlockRow}
-                    className="text-xs font-medium text-ink-muted hover:text-ink"
-                  >
-                    + Adicionar bloco
-                  </button>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="bg-ink text-paper text-sm font-medium py-2 px-4 rounded hover:bg-ink-light transition-colors disabled:opacity-60"
-                >
-                  {saving ? 'Lançando...' : 'Lançar meta'}
-                </button>
-              </form>
-
-              <div>
-                <p className="text-xs font-mono text-ink-muted tracking-wide mb-2">
-                  ÚLTIMAS METAS LANÇADAS
-                </p>
-                <div className="divide-y divide-paper-dark border border-paper-dark rounded-md overflow-hidden">
-                  {goals.map((g) => {
-                    const pillar = pillarOf(g.pillar)
-                    const summary = blockSummaries[g.id]
-                    return (
-                      <div
-                        key={g.id}
-                        className="flex items-center justify-between px-4 py-2 text-sm bg-white/50 gap-2"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${pillar.bg} ${pillar.text}`}>
-                            {pillar.glyph}
-                          </span>
-                          <span className="truncate">{g.title}</span>
-                          {summary && (
-                            <span className="text-[11px] font-mono text-ink-muted shrink-0">
-                              {summary.completed}/{summary.total} blocos
-                            </span>
-                          )}
-                        </div>
-                        <span className="font-mono text-xs text-ink-muted shrink-0">
-                          {new Date(`${g.due_date}T00:00:00`).toLocaleDateString('pt-BR')}
-                          {g.completed ? ' · ✓' : ''}
-                        </span>
-                      </div>
-                    )
-                  })}
-                  {goals.length === 0 && (
-                    <p className="px-4 py-4 text-center text-sm text-ink-muted">
-                      Nenhuma meta lançada ainda.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+ const { user } = useAuth()
+ const [students,setStudents]=useState([]), [selected,setSelected]=useState(null), [goals,setGoals]=useState([])
+ const [form,setForm]=useState(null), [blocks,setBlocks]=useState([]), [error,setError]=useState(''), [message,setMessage]=useState('')
+ const [busy,setBusy]=useState(false), [loading,setLoading]=useState(true), [search,setSearch]=useState('')
+ const request=useRef(0)
+ const fail=e=>setError(e.message || 'Não foi possível concluir. Tente novamente.')
+ async function loadStudents() {
+  setLoading(true)
+  const {data,error}=await supabase.from('profiles').select('*').eq('role','student').or('mentor_id.eq.'+user.id+',mentor_id.is.null').order('full_name')
+  if(error) fail(error); else setStudents(data || [])
+  setLoading(false)
+ }
+ useEffect(()=>{loadStudents()},[user.id])
+ async function selectStudent(student) {
+  const version=++request.current
+  setSelected(student);setForm(null);setGoals([]);setError('');setMessage('');setBusy(true)
+  const {data,error}=await supabase.from('goals').select('*, goal_blocks(*)').eq('student_id',student.id).order('due_date',{ascending:false})
+  if(version!==request.current)return
+  if(error)fail(error);else setGoals(data || [])
+  setBusy(false)
+ }
+ async function claim(student) {
+  setBusy(true);setError('')
+  const {data,error}=await supabase.from('profiles').update({mentor_id:user.id}).eq('id',student.id).is('mentor_id',null).select().single()
+  if(error)fail(error);else {await loadStudents();await selectStudent(data)}
+  setBusy(false)
+ }
+ function edit(goal) {
+  setForm({...goal});setBlocks([...goal.goal_blocks].sort((a,b)=>a.position-b.position));setMessage('');setError('')
+ }
+ async function save(e) {
+  e.preventDefault();setBusy(true);setError('');setMessage('')
+  try {
+   const payload={title:form.title.trim(),category:(form.category || "").trim(),pillar:form.pillar,due_date:form.due_date}
+   if(!payload.title)throw new Error('Preencha o título da meta.')
+   let id=form.id
+   if(id) {
+    const {error}=await supabase.from('goals').update(payload).eq('id',id).eq('student_id',selected.id).select().single();if(error)throw error
+   } else {
+    const {data,error}=await supabase.from('goals').insert({...payload,student_id:selected.id}).select().single();if(error)throw error
+    id=data.id;setForm(f=>({...f,id}))
+   }
+   for(let i=0;i<blocks.length;i++) {
+    const block=blocks[i]
+    const payload={title:block.title.trim(),topic:(block.topic || '').trim(),material_url:(block.material_url || '').trim(),position:i}
+    const result=block.id ? await supabase.from('goal_blocks').update(payload).eq('id',block.id).eq('goal_id',id).select().single() : await supabase.from('goal_blocks').insert({...payload,goal_id:id}).select().single()
+    if(result.error)throw result.error
+    block.id=result.data.id
+   }
+   await selectStudent(selected);setMessage('Meta salva com sucesso.')
+  } catch(e) {setError('Não foi possível salvar tudo. Confira os campos e tente novamente. ' + e.message)} finally {setBusy(false)}
+ }
+ const mine=students.filter(s=>s.mentor_id===user.id && (s.full_name || '').toLowerCase().includes(search.toLowerCase()))
+ const available=students.filter(s=>!s.mentor_id && (s.full_name || '').toLowerCase().includes(search.toLowerCase()))
+ return <div className="max-w-6xl space-y-5">
+ <h1 className="font-serif text-3xl">Alunos e metas</h1><p>Selecione um aluno para acompanhar e editar suas metas ou atribuir novas atividades.</p>
+ {error && <p role="alert" className="bg-selo-vermelho-bg p-3 rounded">{error}</p>}{message && <p role="status" className="bg-selo-verde-bg p-3 rounded">{message}</p>}
+ <div className="grid lg:grid-cols-[240px_1fr] gap-6"><section className="space-y-4">
+ <input aria-label="Buscar aluno" placeholder="Buscar aluno" className={inputClass} value={search} onChange={e=>setSearch(e.target.value)}/>
+ <h2 className="font-semibold">Meus alunos ({mine.length})</h2>
+ {loading ? <p>Carregando alunos...</p> : mine.map(s=><button disabled={busy} key={s.id} onClick={()=>selectStudent(s)} className={'block w-full text-left p-3 border rounded '+(selected?.id===s.id?'bg-ink text-paper':'bg-white')}>{s.full_name || 'Aluno sem nome'}</button>)}
+ {!loading && !mine.length && <p>Nenhum aluno vinculado.</p>}
+ <h2 className="font-semibold">Disponíveis para vincular ({available.length})</h2>
+ {available.map(s=><div className="p-3 border rounded" key={s.id}><p>{s.full_name || 'Aluno sem nome'}</p><button disabled={busy} className="underline mt-2" onClick={()=>claim(s)}>Vincular aluno</button></div>)}
+ {!loading && !available.length && <p>Nenhum aluno aguardando vínculo.</p>}
+ </section><section className="space-y-4 min-w-0">
+ {!selected ? <p className="border border-dashed p-8 rounded">Escolha um aluno na lista ao lado.</p> : <>
+ <div className="flex justify-between gap-3 items-center"><h2 className="text-2xl font-serif">{selected.full_name}</h2><button disabled={busy} onClick={()=>{setForm(blank());setBlocks([]);setMessage('')}} className="bg-ink text-paper rounded px-4 py-2">Nova meta</button></div>
+ <p>{goals.length} metas · {goals.filter(g=>g.completed).length} concluídas · {Math.round(goals.reduce((n,g)=>n+(g.time_seconds || 0),0)/60)} minutos estudados</p>
+ {form && <form onSubmit={save} className="bg-white border rounded p-4 space-y-3"><fieldset disabled={busy} className="space-y-3">
+ <h3 className="font-semibold">{form.id?'Editar meta':'Atribuir meta'} — {selected.full_name}</h3>
+ {['title','category','due_date'].map((key,i)=><label key={key} className="block">{['Título','Matéria','Data'][i]}<input className={inputClass} required={key!=='category'} type={key==='due_date'?'date':'text'} value={form[key] || ''} onChange={e=>setForm({...form,[key]:e.target.value})}/></label>)}
+ <label className="block">Tipo de atividade<select className={inputClass} value={form.pillar} onChange={e=>setForm({...form,pillar:e.target.value})}>{PILLAR_ORDER.map(p=><option key={p} value={p}>{pillarOf(p).label}</option>)}</select></label>
+ <h4>Blocos de estudo</h4>
+ {blocks.map((b,i)=><div key={i} className="border rounded p-3 space-y-2">{['title','topic','material_url'].map((key,j)=><label className="block text-sm" key={key}>{['Nome do bloco','Assunto','Link do material'][j]}<input required={key==='title'} type={key==='material_url'?'url':'text'} className={inputClass} value={b[key] || ''} onChange={e=>setBlocks(blocks.map((row,k)=>k===i?{...row,[key]:e.target.value}:row))}/></label>)}{!b.id && <button type="button" onClick={()=>setBlocks(blocks.filter((_,k)=>k!==i))}>Remover bloco não salvo</button>}</div>)}
+ <button type="button" className="underline" onClick={()=>setBlocks([...blocks,{title:'',topic:'',material_url:''}])}>Adicionar bloco</button>
+ <div className="flex gap-4"><button className="bg-ink text-paper px-4 py-2 rounded" type="submit">{busy?'Salvando...':'Salvar meta'}</button><button type="button" onClick={()=>setForm(null)}>Cancelar</button></div>
+ </fieldset></form>}
+ <h3 className="font-semibold">Metas do aluno</h3>{busy && <p role="status">Carregando ou salvando...</p>}
+ {goals.map(g=><article key={g.id} className="bg-white border rounded p-4 space-y-2"><h4 className="font-semibold">{g.title}</h4><p className="text-sm">{g.due_date.split('-').reverse().join('/')} · {g.category} · {g.completed?'Concluída':'Pendente'} · {g.goal_blocks.filter(b=>b.completed).length}/{g.goal_blocks.length} blocos</p><div className="flex gap-4"><button disabled={busy} className="underline" onClick={()=>edit(g)}>Editar meta</button><Link className="underline" to={'/metas/'+g.id}>Ver detalhes</Link></div></article>)}
+ {!busy && !goals.length && <p>Este aluno ainda não possui metas. Use “Nova meta” para começar.</p>}
+ </>}
+ </section></div></div>
 }
