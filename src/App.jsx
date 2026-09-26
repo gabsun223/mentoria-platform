@@ -13,6 +13,8 @@ import MentorPanel from './pages/MentorPanel'
 import MentorOverview from './pages/MentorOverview'
 import Students from './pages/Students'
 import Resources from './pages/Resources'
+import GoalCatalog from './pages/GoalCatalog'
+import WeekPacks from './pages/WeekPacks'
 import { Avatar } from './components/WorkspaceUI'
 import { Link } from 'react-router-dom'
 
@@ -97,6 +99,8 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/mentor/catalogo" element={<ProtectedRoute requireRole="mentor"><Layout><GoalCatalog /></Layout></ProtectedRoute>} />
+      <Route path="/mentor/pacotes" element={<ProtectedRoute requireRole="mentor"><Layout><WeekPacks /></Layout></ProtectedRoute>} />
       <Route path="/mentor/alunos" element={<ProtectedRoute requireRole="mentor"><Layout><Students /></Layout></ProtectedRoute>} />
       <Route path="/mentor/metas" element={<ProtectedRoute requireRole="mentor"><Layout><MentorPanel /></Layout></ProtectedRoute>} />
       <Route path="/mentor/relatorios" element={<ProtectedRoute requireRole="mentor"><Layout><MentorOverview reports /></Layout></ProtectedRoute>} />

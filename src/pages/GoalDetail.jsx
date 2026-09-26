@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import StudyTimer from '../components/StudyTimer'
+import GoalResultsEditor from '../components/GoalResultsEditor'
 import { pillarOf } from '../lib/pillars'
 
 export default function GoalDetail() {
@@ -19,6 +20,8 @@ export default function GoalDetail() {
   const [savingBlockId, setSavingBlockId] = useState(null)
   const [concluding, setConcluding] = useState(false)
   const [copiedBlockId, setCopiedBlockId] = useState(null)
+  const [timerBusy, setTimerBusy] = useState(false)
+  const [notice, setNotice] = useState('')
 
   // Ref sincronizado com `goal` — o StudyTimer pode chamar onAddSeconds a partir
   // de uma closure "velha" (ex: commit no unmount, com o mount original). Ler
@@ -72,12 +75,20 @@ export default function GoalDetail() {
   }, [load])
 
   const handleAddSeconds = async (delta) => {
-    const current = goalRef.current
+    const current = goal
     if (!current) return
-    const newTotal = current.time_seconds + delta
-    goalRef.current = { ...current, time_seconds: newTotal }
-    setGoal(goalRef.current)
-    await supabase.from('goals').update({ time_seconds: newTotal }).eq('id', current.id)
+    // Compare-and-swap preserves time added concurrently in another tab.
+    for (let attempt=0; attempt<3; attempt++) {
+      const read=await supabase.from('goals').select('time_seconds').eq('id',current.id).single()
+      if(read.error) throw read.error
+      const result=await supabase.from('goals').update({time_seconds:read.data.time_seconds+delta}).eq('id',current.id).eq('time_seconds',read.data.time_seconds).select().maybeSingle()
+      if(result.error) throw result.error
+      if(result.data){
+        if(goalRef.current?.id===current.id){goalRef.current={...goalRef.current,time_seconds:result.data.time_seconds};setGoal(goalRef.current)}
+        return
+      }
+    }
+    throw Error('O tempo mudou em outra tela. Tente salvar novamente.')
   }
 
   const toggleBlock = async (block) => {
@@ -93,6 +104,7 @@ export default function GoalDetail() {
       )
     }
     setSavingBlockId(null)
+    if(error) setNotice(error.message)
   }
 
   const copyMaterial = async (block) => {
@@ -114,6 +126,7 @@ export default function GoalDetail() {
       .update({ completed: nextCompleted })
       .eq('id', goal.id)
     if (!error) setGoal((g) => ({ ...g, completed: nextCompleted }))
+    else setNotice(error.message)
     setConcluding(false)
   }
 
@@ -196,7 +209,9 @@ export default function GoalDetail() {
       </div>
 
       <div className="mb-4">
-        {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer totalSeconds={goal.time_seconds} onAddSeconds={handleAddSeconds} />}
+        {notice && <p className="notice error" role="alert">{notice}</p>}
+        {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer key={'timer-'+goal.id} totalSeconds={goal.time_seconds} onAddSeconds={handleAddSeconds} onBusyChange={setTimerBusy} />}
+        <GoalResultsEditor key={'results-'+goal.id} goal={goal} disabled={timerBusy} onSaved={g=>{goalRef.current=g;setGoal(g)}}/>
       </div>
 
       <div className="mb-4">

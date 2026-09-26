@@ -30,7 +30,12 @@ function beep() {
 
 // Cronômetro soma tempo real ao total salvo da meta (onAddSeconds).
 // Timer é um contador regressivo tipo pomodoro, não persiste tempo.
-export default function StudyTimer({ totalSeconds, onAddSeconds }) {
+export default function StudyTimer({ totalSeconds, onAddSeconds, onBusyChange }) {
+  const [saving,setSaving]=useState(false)
+  const [saveError,setSaveError]=useState('')
+  const callbackRef=useRef(onAddSeconds)
+  callbackRef.current=onAddSeconds
+  const savingRef=useRef(false)
   const [tab, setTab] = useState('cronometro')
   const [running, setRunning] = useState(false)
   const [sessionElapsed, setSessionElapsed] = useState(0)
@@ -46,27 +51,34 @@ export default function StudyTimer({ totalSeconds, onAddSeconds }) {
     sessionElapsedRef.current = sessionElapsed
   }, [sessionElapsed])
 
-  const commitSession = () => {
-    if (sessionElapsedRef.current > 0) {
-      onAddSeconds(sessionElapsedRef.current)
-      setSessionElapsed(0)
-    }
+  const commitSession = async () => {
+    if (savingRef.current || sessionElapsedRef.current <= 0) return
+    const delta=sessionElapsedRef.current
+    savingRef.current=true;setSaving(true);setSaveError('')
+    sessionElapsedRef.current=0;setSessionElapsed(0)
+    try { await callbackRef.current(delta) }
+    catch(e){sessionElapsedRef.current+=delta;setSessionElapsed(sessionElapsedRef.current);setSaveError('Tempo ainda não salvo. '+e.message)}
+    finally {savingRef.current=false;setSaving(false)}
   }
+
+  useEffect(()=>{onBusyChange?.(running || saving || sessionElapsed>0)},[running,saving,sessionElapsed,onBusyChange])
+  useEffect(()=>{
+    const warn=e=>{if(sessionElapsedRef.current>0 || savingRef.current){e.preventDefault();e.returnValue=''}}
+    window.addEventListener('beforeunload',warn)
+    return ()=>window.removeEventListener('beforeunload',warn)
+  },[])
 
   useEffect(() => {
     if (!running) return
+    const started=Date.now(), elapsedAtStart=sessionElapsedRef.current, remainingAtStart=remaining
     intervalRef.current = setInterval(() => {
       if (tab === 'cronometro') {
-        setSessionElapsed((s) => s + 1)
+        sessionElapsedRef.current=elapsedAtStart+Math.floor((Date.now()-started)/1000)
+        setSessionElapsed(sessionElapsedRef.current)
       } else {
-        setRemaining((r) => {
-          if (r <= 1) {
-            setRunning(false)
-            if (!muted) beep()
-            return 0
-          }
-          return r - 1
-        })
+        const left=Math.max(0,remainingAtStart-Math.floor((Date.now()-started)/1000))
+        setRemaining(left)
+        if(left===0){setRunning(false);if(!muted)beep()}
       }
     }, 1000)
     return () => clearInterval(intervalRef.current)
@@ -102,7 +114,9 @@ export default function StudyTimer({ totalSeconds, onAddSeconds }) {
   }
 
   return (
-    <div className="border border-paper-dark rounded-md bg-white/60 p-4">
+    <fieldset disabled={saving} className="border border-paper-dark rounded-md bg-white/60 p-4">
+      {saveError && <div role="alert" className="notice error">{saveError}<button type="button" className="btn" onClick={commitSession}>Tentar salvar tempo</button></div>}
+      {saving && <p role="status">Salvando tempo…</p>}
       <div className="flex items-center justify-between mb-3">
         <p className="font-mono text-[11px] text-ink-muted tracking-wide">
           CRONÔMETRO DE ESTUDO
@@ -181,6 +195,6 @@ export default function StudyTimer({ totalSeconds, onAddSeconds }) {
           </button>
         </div>
       </div>
-    </div>
+    </fieldset>
   )
 }

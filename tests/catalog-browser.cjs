@@ -1,0 +1,49 @@
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const assert=require('node:assert/strict');const fs=require('fs');const path=require('path');
+const mentor='10000000-0000-4000-8000-000000000001',student='10000000-0000-4000-8000-000000000002';
+const date=d=>{const x=new Date();x.setDate(x.getDate()-(x.getDay()+6)%7+d);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`};
+const out=process.env.QA_OUTPUT || path.resolve('artifacts/catalog-qa');fs.mkdirSync(out,{recursive:true});
+const db={profiles:[{id:mentor,full_name:'Mentor Teste',role:'mentor'},{id:student,full_name:'Aluna Teste',role:'student',mentor_id:mentor}],goals:[{id:'g1',student_id:student,title:'Revisão constitucional',category:'Constitucional',pillar:'leitura',due_date:date(0),completed:true,time_seconds:5400,questions_total:20,questions_correct:16,goal_blocks:[]},{id:'g2',student_id:student,title:'Leitura pendente',category:'Administrativo',pillar:'leitura',due_date:date(0),completed:false,time_seconds:0,goal_blocks:[]},{id:'g3',student_id:student,title:'Planejamento futuro',category:'Civil',pillar:'leitura',due_date:date(6),completed:false,time_seconds:0,goal_blocks:[]}],exam_history:[],goal_templates:[],goal_week_packs:[],goal_blocks:[]};let count=0;const imported=new Set();
+(async()=>{const browser=await chromium.launch({channel:'msedge',headless:true});try{
+const context=await browser.newContext({viewport:{width:1600,height:1050}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await context.route('https://*.supabase.co/**',async route=>{
+ const req=route.request(),url=new URL(req.url()),table=url.pathname.split('/').pop();
+ if(url.pathname.includes('/auth/'))return route.fulfill({json:{}});
+ if(!url.pathname.includes('/rest/v1/'))return route.abort();
+ const payload=req.postDataJSON();const single=(req.headers().accept || '').includes('vnd.pgrst.object');
+ const respond=data=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(single?data[0]:data)});
+ if(table==='import_goal_week_pack'){
+   const key=JSON.stringify(payload);if(imported.has(key))return route.fulfill({status:400,json:{message:'Este pacote já foi importado para este aluno nesta semana.'}});
+   imported.add(key);const p=db.goal_week_packs.find(p=>p.id===payload.p_pack);
+   for(const it of p.items){const t=db.goal_templates.find(t=>t.id===it.template_id);const d=new Date(payload.p_week+'T12:00:00');d.setDate(d.getDate()+it.weekday);db.goals.push({id:'new'+(++count),student_id:payload.p_student,title:t.title,category:t.category,pillar:t.pillar,due_date:d.toISOString().slice(0,10),completed:false,time_seconds:0,questions_total:null,questions_correct:null,goal_blocks:[]})}
+   return route.fulfill({json:p.items.length});
+ }
+ if(!db[table])throw Error('Unexpected table '+table);
+ let rows=db[table].filter(row=>[...url.searchParams].every(([key,val])=>!val.startsWith('eq.') || String(row[key])===val.slice(3)));
+ if(req.method()==='POST'){const list=Array.isArray(payload)?payload:[payload];rows=list.map(p=>({id:'new'+(++count),completed:false,time_seconds:0,goal_blocks:[],...p}));db[table].push(...rows)}
+ if(req.method()==='PATCH')rows.forEach(r=>Object.assign(r,payload));
+ return respond(rows);
+});
+async function login(id){await page.addInitScript(({id,mentor})=>{id=localStorage.getItem('qa-user') || id;const session={access_token:'eyJhbGciOiJIUzI1NiJ9.'+btoa(JSON.stringify({sub:id,exp:2100000000}))+'.test',refresh_token:'test',expires_at:2100000000,expires_in:3600,token_type:'bearer',user:{id,email:id===mentor?'mentor@test.local':'student@test.local',aud:'authenticated',role:'authenticated'}};localStorage.setItem('sb-dgkftixzeudmvmdfcrwu-auth-token',JSON.stringify(session))},{id,mentor})}
+await login(mentor);await page.goto('http://127.0.0.1:5191/mentor/catalogo');
+await page.getByRole('button',{name:'＋ Nova meta padrão',exact:true}).click();
+await page.getByLabel('Matéria',{exact:true}).fill('Constitucional');await page.getByLabel('Título da meta',{exact:true}).fill('Direitos fundamentais');await page.getByLabel('Assunto',{exact:true}).fill('Artigo 5º');
+await page.getByRole('button',{name:'＋ Bloco de estudo'}).click();await page.getByLabel('Nome do bloco').fill('Leitura da Constituição');await page.getByLabel('Orientações',{exact:true}).fill('Leia e revise os incisos.');await page.getByLabel('Material',{exact:true}).fill('https://example.com/material');await page.getByRole('button',{name:'Salvar no catálogo'}).click();await page.getByText('Meta padrão salva no catálogo.').waitFor();assert.equal(db.goal_templates.length,1);
+await page.getByLabel('Buscar no catálogo').fill('Artigo');await page.getByText('1 metas · 1 assuntos').waitFor();await page.screenshot({path:path.join(out,'catalog.png'),fullPage:true});
+await page.goto('http://127.0.0.1:5191/mentor/pacotes');await page.getByRole('button',{name:'＋ Novo pacote'}).click();await page.getByLabel('Nome do pacote').fill('Semana 1 — Fundamentos');await page.getByLabel('Adicionar meta em Segunda',{exact:true}).selectOption(db.goal_templates[0].id);await page.getByLabel('Adicionar meta em Quinta',{exact:true}).selectOption(db.goal_templates[0].id);await page.screenshot({path:path.join(out,'pack-editor.png'),fullPage:true});await page.getByRole('button',{name:'Salvar pacote'}).click();await page.getByText('Pacote semanal salvo.').waitFor();assert.equal(db.goal_week_packs[0].items.length,2);
+await page.getByRole('link',{name:'Importar para aluno'}).click();await page.getByLabel('Aluno',{exact:true}).selectOption(student);await page.getByRole('button',{name:'Importar pacote para esta semana',exact:true}).click();await page.getByText('2 metas importadas.').waitFor();assert.equal(db.goals.length,5);
+await page.locator('.calendar-goal.done').waitFor();assert.equal(await page.locator('.calendar-goal.done').count(),1);assert.equal(await page.locator('.calendar-goal.late').count(),db.goals.filter(g=>!g.completed && g.due_date<new Date().toLocaleDateString('en-CA')).length);await page.getByText('Tempo total: 1h 30min').waitFor();await page.getByText('80% de acertos').waitFor();
+await page.getByRole('button',{name:'Importar pacote semanal',exact:true}).click();await page.getByRole('button',{name:'Importar pacote para esta semana',exact:true}).click();await page.getByText('Este pacote já foi importado para este aluno nesta semana.').waitFor();assert.equal(db.goals.length,5);await page.getByRole('button',{name:'Fechar',exact:true}).click();
+await page.getByRole('button',{name:'Revisão constitucional',exact:true}).click();await page.getByLabel('Horas estudadas').fill('2');await page.getByLabel('Minutos estudados').fill('15');await page.getByLabel('Questões respondidas').fill('10');await page.getByLabel('Acertos',{exact:true}).fill('9');await page.getByRole('button',{name:'Salvar alterações'}).click();await page.getByText('Meta salva com sucesso.').waitFor();assert.equal(db.goals[0].time_seconds,8100);await page.getByText('90% de acertos').waitFor();
+await page.locator('.calendar-day').nth(2).getByRole('button',{name:'＋ Adicionar meta'}).click();await page.getByRole('button',{name:'Preencher com meta do catálogo'}).click();await page.getByRole('button',{name:/Direitos fundamentais.*Usar/}).click();assert.equal(await page.getByLabel('Prazo',{exact:true}).inputValue(),date(2));await page.getByRole('button',{name:'Salvar alterações'}).click();await page.getByText('Meta salva com sucesso.').waitFor();assert.equal(db.goals.length,6);
+await page.screenshot({path:path.join(out,'mentor-calendar.png'),fullPage:true});
+await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(out,'mobile-calendar.png'),fullPage:true});
+await page.evaluate(id=>localStorage.setItem('qa-user',id),student);
+await page.setViewportSize({width:1400,height:950});await page.goto('http://127.0.0.1:5191/semana');
+await page.locator('.calendar-goal.done').waitFor();assert.equal(await page.getByRole('link',{name:'Catálogo de metas'}).count(),0);
+await page.getByRole('link',{name:'Revisão constitucional',exact:true}).click();
+await page.getByRole('button',{name:'Editar tempo e resultados'}).click();await page.getByLabel('Horas estudadas').fill('1');await page.getByLabel('Minutos estudados').fill('40');await page.getByLabel('Questões respondidas').fill('20');await page.getByLabel('Acertos',{exact:true}).fill('21');await page.getByRole('button',{name:'Salvar registro'}).click();await page.getByText('Informe questões e acertos; os acertos não podem superar as questões.').waitFor();assert.equal(db.goals[0].time_seconds,8100);
+await page.getByLabel('Acertos',{exact:true}).fill('15');await page.getByRole('button',{name:'Salvar registro'}).click();await page.getByText('Registro do estudo salvo.').waitFor();assert.equal(db.goals[0].time_seconds,6000);assert.equal(db.goals[0].questions_correct,15);
+await page.getByRole('button',{name:'Iniciar',exact:true}).click();assert.equal(await page.getByRole('button',{name:'Editar tempo e resultados'}).isEnabled(),false);await page.waitForTimeout(2200);await page.getByRole('button',{name:'Pausar',exact:true}).click();await page.getByRole('button',{name:'Editar tempo e resultados'}).waitFor();await page.waitForFunction(()=>!document.querySelector('fieldset[disabled]'));assert.ok(db.goals[0].time_seconds>=6002);
+await page.screenshot({path:path.join(out,'student-results.png'),fullPage:true});
+assert.deepEqual(errors,[]);console.log('PASS: catalog CRUD, packs, import/duplicate, calendar states/metrics, mentor time/results, catalog-to-day, mobile, student results validation/save and stopwatch.');}finally{await browser.close()}})().catch(e=>{console.error(e);process.exit(1)});
