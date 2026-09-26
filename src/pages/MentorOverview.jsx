@@ -1,0 +1,19 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { format } from 'date-fns'
+import useWorkspace from '../lib/useWorkspace'
+import { PageTitle, Stat, Card, Empty, Avatar, WeekPicker, weekDates, dateKey, hours } from '../components/WorkspaceUI'
+export default function MentorOverview({reports=false}) {
+ const {students,goals,loading,error,user,reload}=useWorkspace();const [offset,setOffset]=useState(0);const week=weekDates(offset)
+ const mine=students.filter(s=>s.mentor_id===user.id)
+ const current=goals.filter(g=>g.due_date>=week.from && g.due_date<=week.to)
+ const done=current.filter(g=>g.completed).length
+ const attention=mine.map(s=>({...s,late:goals.filter(g=>g.student_id===s.id && !g.completed && g.due_date<dateKey()).length})).filter(s=>s.late)
+ const periods=Array.from({length:4},(_,i)=>{const w=weekDates(offset-3+i);const list=goals.filter(g=>g.due_date>=w.from && g.due_date<=w.to);return {label:format(w.start,'dd/MM'),count:list.length,value:list.length?Math.round(list.filter(g=>g.completed).length/list.length*100):0}})
+ return <><PageTitle title={reports?'Relatórios':'Visão geral'} subtitle="Acompanhe sua mentoria e saiba onde agir nesta semana."><WeekPicker offset={offset} onChange={setOffset}/></PageTitle>
+ {error && <div role="alert" className="notice error">{error}<button onClick={reload}>Tentar novamente</button></div>}{loading && <p role="status">Carregando sua mentoria...</p>}
+ <div className="stat-grid"><Stat title="Alunos vinculados" value={mine.length} icon="users" tone="blue" caption="Sob seu acompanhamento"/><Stat title="Metas concluídas" value={done+' de '+current.length} caption={current.length?Math.round(done/current.length*100)+'% da semana':'Nenhuma meta nesta semana'} icon="check"/><Stat title="Precisam de atenção" value={attention.length} icon="alert" tone="amber" caption="Alunos com metas atrasadas"/><Stat title="Tempo nas metas" value={hours(current.reduce((n,g)=>n+(g.time_seconds || 0),0))} icon="clock" caption="Acumulado nas metas da semana"/></div>
+ <div className="dashboard-grid"><div className="stack"><Card title="Evolução das metas" subtitle="Conclusão por semana de prazo · últimas 4 semanas"><div className="bar-chart">{periods.map(p=><div className="bar-column" key={p.label}><strong>{p.count?p.value+'%':'—'}</strong><div className="bar-well"><span style={{height:(p.count?Math.max(p.value,2):2)+'%'}}/></div><small>{p.label}</small></div>)}</div><p className="chart-note">Sem metas no período aparece como “—”.</p></Card>
+ <Card title="Alunos que precisam de atenção" action={<Link className="text-action" to="/mentor/alunos">Ver alunos →</Link>}>{attention.length?attention.map(s=><div className="data-row" key={s.id}><Avatar name={s.full_name}/><strong>{s.full_name || 'Aluno'}</strong><span className="late-text">{s.late} meta(s) atrasada(s)</span><Link className="text-action" to={'/mentor/metas?aluno='+s.id+'&periodo=todos'}>Ver aluno →</Link></div>):<Empty>Nenhum aluno com metas atrasadas.</Empty>}</Card></div>
+ <div className="stack"><Card title="Próximos encontros"><Empty><span className="empty-icon">▦</span>O agendamento de encontros chegará em uma próxima etapa.</Empty><Link className="text-action" to="/encontros">Sobre os encontros →</Link></Card><Card title="Metas adicionadas recentemente" subtitle="Últimos lançamentos do professor">{[...goals].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,4).map(g=><Link className="activity-row" key={g.id} to={'/mentor/metas?aluno='+g.student_id+'&periodo=todos'}><span className="activity-dot">✓</span><div><strong>{g.title}</strong><small>{mine.find(s=>s.id===g.student_id)?.full_name} · {format(new Date(g.created_at),'dd/MM/yyyy')}</small></div></Link>)}{!goals.length && <Empty>As novas metas aparecerão aqui.</Empty>}</Card></div></div></>
+}

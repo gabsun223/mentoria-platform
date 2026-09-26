@@ -10,12 +10,18 @@ import GoalDetail from './pages/GoalDetail'
 import ExamHistory from './pages/ExamHistory'
 import Profile from './pages/Profile'
 import MentorPanel from './pages/MentorPanel'
+import MentorOverview from './pages/MentorOverview'
+import Students from './pages/Students'
+import Resources from './pages/Resources'
+import { Avatar } from './components/WorkspaceUI'
+import { Link } from 'react-router-dom'
 
 function Layout({ children }) {
+  const { profile } = useAuth()
   return (
-    <div className="flex">
+    <div className="app-shell">
       <Sidebar />
-      <main className="flex-1 p-8">{children}</main>
+      <div className="app-content"><header className="topbar"><span>Seu próximo passo começa aqui.</span><Link to="/perfil" className="profile-link"><Avatar name={profile?.full_name}/><div><strong>{profile?.full_name || 'Minha conta'}</strong><small>{profile?.role === 'mentor' ? 'Professor' : 'Aluno'}</small></div><span>⌄</span></Link></header><main className="workspace">{children}</main></div>
     </div>
   )
 }
@@ -86,11 +92,17 @@ export default function App() {
         element={
           <ProtectedRoute requireRole="mentor">
             <Layout>
-              <MentorPanel />
+              <MentorOverview />
             </Layout>
           </ProtectedRoute>
         }
       />
+      <Route path="/mentor/alunos" element={<ProtectedRoute requireRole="mentor"><Layout><Students /></Layout></ProtectedRoute>} />
+      <Route path="/mentor/metas" element={<ProtectedRoute requireRole="mentor"><Layout><MentorPanel /></Layout></ProtectedRoute>} />
+      <Route path="/mentor/relatorios" element={<ProtectedRoute requireRole="mentor"><Layout><MentorOverview reports /></Layout></ProtectedRoute>} />
+      <Route path="/encontros" element={<ProtectedRoute><Layout><Resources type="meetings" /></Layout></ProtectedRoute>} />
+      <Route path="/materiais" element={<ProtectedRoute><Layout><StudentPage><Resources type="materials" /></StudentPage></Layout></ProtectedRoute>} />
+      <Route path="/estudos" element={<ProtectedRoute><Layout><StudentPage><Resources type="study" /></StudentPage></Layout></ProtectedRoute>} />
     </Routes>
   )
 }

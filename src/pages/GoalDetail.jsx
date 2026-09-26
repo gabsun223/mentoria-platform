@@ -125,7 +125,7 @@ export default function GoalDetail() {
     return (
       <div className="max-w-2xl">
         <p className="text-sm text-ink-muted">Meta não encontrada.</p>
-        <Link to={isMentor ? "/mentor" : "/semana"} className="text-sm text-ink underline mt-2 inline-block">
+        <Link to={isMentor ? "/mentor/metas?periodo=todos" : "/semana"} className="text-sm text-ink underline mt-2 inline-block">
           Voltar ao cronograma
         </Link>
       </div>

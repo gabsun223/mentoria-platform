@@ -4,12 +4,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        paper: '#F3F2ED',
-        'paper-dark': '#E8E6DD',
+        paper: '#F7F9FA',
+        'paper-dark': '#E4E9ED',
         ink: {
-          DEFAULT: '#1B2A4A',
-          light: '#2E4270',
-          muted: '#5B6B8C',
+          DEFAULT: '#176B48',
+          light: '#11583A',
+          muted: '#6A7689',
         },
         selo: {
           verde: '#2F6B3C',
@@ -31,7 +31,7 @@ export default {
         },
       },
       fontFamily: {
-        serif: ['"Source Serif 4"', 'Georgia', 'serif'],
+        serif: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'monospace'],
       },

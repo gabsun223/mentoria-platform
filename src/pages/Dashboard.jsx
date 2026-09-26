@@ -1,109 +1,16 @@
-import { useEffect, useState, useCallback } from 'react'
-import { supabase } from '../supabaseClient'
-import { useAuth } from '../context/AuthContext'
-import GoalItem from '../components/GoalItem'
-import { fetchBlockSummaries, quickCompleteGoal } from '../lib/goalActions'
-
-function todayISO() {
-  const d = new Date()
-  return d.toISOString().slice(0, 10)
-}
-
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import useWorkspace from '../lib/useWorkspace'
+import { PageTitle, Stat, Card, Empty, Status, Icon, weekDates, dateKey, hours } from '../components/WorkspaceUI'
 export default function Dashboard() {
-  const { user, profile } = useAuth()
-  const [goals, setGoals] = useState([])
-  const [blockSummaries, setBlockSummaries] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [busyId, setBusyId] = useState(null)
-
-  const loadGoals = useCallback(async () => {
-    if (!user) return
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('goals')
-      .select('*')
-      .eq('student_id', user.id)
-      .eq('due_date', todayISO())
-      .order('created_at', { ascending: true })
-
-    if (!error) {
-      const list = data ?? []
-      setGoals(list)
-      setBlockSummaries(await fetchBlockSummaries(list.map((g) => g.id)))
-    }
-    setLoading(false)
-  }, [user])
-
-  useEffect(() => {
-    loadGoals()
-  }, [loadGoals])
-
-  const toggleGoal = async (goal) => {
-    setBusyId(goal.id)
-    const error = await quickCompleteGoal(goal)
-    if (!error) {
-      setGoals((prev) =>
-        prev.map((g) => (g.id === goal.id ? { ...g, completed: !g.completed } : g))
-      )
-      if (!goal.completed) {
-        setBlockSummaries((prev) => {
-          const s = prev[goal.id]
-          if (!s) return prev
-          return { ...prev, [goal.id]: { ...s, completed: s.total } }
-        })
-      }
-    }
-    setBusyId(null)
-  }
-
-  const concluidas = goals.filter((g) => g.completed).length
-  const pct = goals.length ? Math.round((concluidas / goals.length) * 100) : 0
-
-  return (
-    <div className="max-w-3xl">
-      <p className="font-mono text-[11px] text-ink-muted tracking-wide">
-        {new Date().toLocaleDateString('pt-BR', {
-          weekday: 'long',
-          day: '2-digit',
-          month: 'long',
-        })}
-      </p>
-      <h1 className="font-serif text-3xl font-semibold text-ink mt-1">
-        Bom estudo, {profile?.full_name?.split(' ')[0]}.
-      </h1>
-
-      <div className="mt-6 mb-4 flex items-center gap-3">
-        <div className="h-2 flex-1 bg-paper-dark rounded-full overflow-hidden">
-          <div
-            className="h-full bg-selo-verde transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <span className="font-mono text-xs text-ink-muted">{pct}%</span>
-      </div>
-
-      {loading ? (
-        <p className="text-sm text-ink-muted font-mono">Carregando metas...</p>
-      ) : goals.length === 0 ? (
-        <div className="border border-dashed border-paper-dark rounded-md p-8 text-center text-ink-muted">
-          <p className="text-sm">Nenhuma meta cadastrada para hoje.</p>
-          <p className="text-xs mt-1 font-mono">
-            Peça ao seu mentor para lançar as metas do dia.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {goals.map((goal) => (
-            <GoalItem
-              key={goal.id}
-              goal={goal}
-              blockSummary={blockSummaries[goal.id]}
-              busy={busyId === goal.id}
-              onQuickComplete={toggleGoal}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+ const {goals,exams,profile,loading,error,reload}=useWorkspace();const [focus,setFocus]=useState('');const week=weekDates(0)
+ const today=goals.filter(g=>g.due_date===dateKey()),weekly=goals.filter(g=>g.due_date>=week.from && g.due_date<=week.to),pending=goals.filter(g=>!g.completed)
+ const questions=exams.reduce((n,e)=>n+e.total_questions,0),correct=exams.reduce((n,e)=>n+e.correct_answers,0)
+ const subjects=[...new Set(weekly.map(g=>g.category || 'Sem disciplina'))]
+ const currentFocus=focus || pending[0]?.id
+ return <><PageTitle title={'Olá, '+(profile.full_name?.split(' ')[0] || 'estudante')+'!'} subtitle="Vamos avançar mais um pouco hoje?"><span className="muted date-label">{new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</span></PageTitle>
+ {error && <p role="alert" className="notice error">{error}<button onClick={reload}>Tentar novamente</button></p>}{loading && <p role="status">Carregando seus estudos...</p>}
+ <div className="stat-grid"><Stat title="Tempo nas metas de hoje" value={hours(today.reduce((n,g)=>n+(g.time_seconds || 0),0))} caption="Tempo acumulado nessas metas" icon="clock"/><Stat title="Metas do dia" value={today.filter(g=>g.completed).length+' de '+today.length} icon="target" caption="Atividades concluídas"/><Stat title="Questões em provas" value={questions} icon="file" caption="Total das provas registradas"/><Stat title="Taxa de acertos" value={questions?Math.round(correct/questions*100)+'%':'—'} caption={questions?correct+' acertos nas provas':'Nenhuma prova registrada'} icon="chart"/></div>
+ <div className="dashboard-grid student"><div className="stack"><Card title="Metas de hoje" action={<Link className="text-action" to="/semana">Ver semana →</Link>}>{today.map(g=><Link className="student-goal" to={'/metas/'+g.id} key={g.id}><span className={'goal-check '+(g.completed?'checked':'')}>{g.completed?'✓':''}</span><div><strong>{g.title}</strong><div className="goal-meta"><span className="subject-tag">{g.category || 'Estudo'}</span><small>{hours(g.time_seconds)}</small></div></div><Status goal={g}/></Link>)}{!today.length && <Empty>Seu dia está sem metas programadas.<br/><Link className="text-action" to="/estudos">Consultar outras metas →</Link></Empty>}</Card><Card title="Progresso por disciplina" subtitle="Conclusão das metas com prazo nesta semana" action={<Link className="text-action" to="/provas">Ver desempenho →</Link>}>{subjects.map(s=>{const list=weekly.filter(g=>(g.category || 'Sem disciplina')===s),pct=Math.round(list.filter(g=>g.completed).length/list.length*100);return <div className="discipline-row" key={s}><span>{s}</span><div className="progress-track"><span style={{width:pct+'%'}}/></div><strong>{pct}%</strong></div>})}{!subjects.length && <Empty>O progresso aparecerá quando houver metas nesta semana.</Empty>}</Card></div>
+ <div className="stack"><Card title="Hora de focar" subtitle="Escolha uma atividade para continuar."><div className="focus-clock">{hours(goals.find(g=>g.id===currentFocus)?.time_seconds)}</div><select aria-label="Meta para estudar" className="field" disabled={!pending.length} value={currentFocus || ''} onChange={e=>setFocus(e.target.value)}>{!pending.length && <option>Sem metas pendentes</option>}{pending.map(g=><option value={g.id} key={g.id}>{g.title}</option>)}</select>{currentFocus?<Link className="btn primary full" to={'/metas/'+currentFocus}><Icon name="play"/>Abrir estudo</Link>:<p className="muted small">Seu mentor pode atribuir novas atividades.</p>}<p className="muted small">O cronômetro fica disponível dentro da meta.</p></Card><Card title="Próximo encontro"><Empty>O agendamento de encontros estará disponível em uma próxima etapa.</Empty></Card><Card title="Sua semana de estudos"><strong className="large-number">{hours(weekly.reduce((n,g)=>n+(g.time_seconds || 0),0))}</strong><p className="muted small">Tempo acumulado nas metas desta semana.</p><div className="week-summary"><span>{weekly.length} metas planejadas</span><span>{weekly.filter(g=>g.completed).length} concluídas</span></div></Card></div></div></>
 }

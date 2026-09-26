@@ -1,11 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { Icon } from './WorkspaceUI'
 export default function Sidebar() {
- const { profile, signOut } = useAuth()
- const mentor = profile?.role === 'mentor'
- const links = mentor ? [['/mentor', 'Alunos e metas'], ['/perfil', 'Meu perfil']] : [['/', 'Metas de hoje'], ['/semana', 'Minha semana'], ['/provas', 'Histórico de provas'], ['/perfil', 'Meu perfil']]
- return <aside className="w-48 md:w-64 shrink-0 border-r border-paper-dark bg-paper flex flex-col min-h-screen">
- <div className="p-5 border-b border-paper-dark"><h1 className="font-serif text-xl">Mentoria Procuradorias</h1><p className="text-xs mt-2">{mentor ? 'ÁREA DO MENTOR' : 'ÁREA DO ALUNO'}</p></div>
- <nav className="flex-1 p-3 space-y-2">{links.map(([to,label])=><NavLink key={to} end to={to} className={({isActive})=>'block rounded px-4 py-3 text-sm '+(isActive?'bg-ink text-paper':'hover:bg-paper-dark')}>{label}</NavLink>)}</nav>
- <div className="p-4 border-t border-paper-dark"><p>{profile?.full_name || (mentor ? 'Mentor' : 'Aluno')}</p><button className="mt-3 underline" onClick={signOut}>Sair</button></div></aside>
+ const {profile,signOut}=useAuth();const mentor=profile?.role==='mentor'
+ const links=mentor?[['/mentor','Visão geral','home'],['/mentor/alunos','Alunos','users'],['/mentor/metas','Metas semanais','target'],['/encontros','Encontros','calendar'],['/mentor/relatorios','Relatórios','chart']]:[['/','Visão geral','home'],['/semana','Minhas metas','target'],['/estudos','Sessões de estudo','play'],['/provas','Desempenho','chart'],['/materiais','Materiais','file'],['/encontros','Encontros','calendar']]
+ return <aside className="app-sidebar"><div className="brand"><Icon name="leaf" size={29}/><strong>Minha Mentoria</strong></div><span className="sidebar-caption">PAINEL DO {mentor?'PROFESSOR':'ALUNO'}</span><nav>{links.map(([to,label,icon])=><NavLink end to={to} key={to} className={({isActive})=>'nav-item '+(isActive?'active':'')}><Icon name={icon}/><span>{label}</span></NavLink>)}</nav><div className="sidebar-bottom"><NavLink className="nav-item" to="/perfil"><Icon name="settings"/>Configurações</NavLink><button className="nav-item" onClick={signOut}>Sair da conta</button></div></aside>
 }

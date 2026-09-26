@@ -1,92 +1,56 @@
-import { useEffect, useState, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { addDays, format } from 'date-fns'
+import useWorkspace from '../lib/useWorkspace'
 import { supabase } from '../supabaseClient'
-import { useAuth } from '../context/AuthContext'
 import { PILLAR_ORDER, pillarOf } from '../lib/pillars'
-const blank = () => ({ title: '', category: '', pillar: 'leitura', due_date: new Date().toLocaleDateString('en-CA') })
-const inputClass = 'w-full border border-paper-dark rounded bg-white p-2 text-sm'
+import { PageTitle, WeekPicker, weekDates, dateKey, Card, Empty, Status, Progress, Icon, Stat } from '../components/WorkspaceUI'
+const fresh = (student,date) => ({student_id:student,title:'',category:'',pillar:'leitura',due_date:date,goal_blocks:[]})
 export default function MentorPanel() {
- const { user } = useAuth()
- const [students,setStudents]=useState([]), [selected,setSelected]=useState(null), [goals,setGoals]=useState([])
- const [form,setForm]=useState(null), [blocks,setBlocks]=useState([]), [error,setError]=useState(''), [message,setMessage]=useState('')
- const [busy,setBusy]=useState(false), [loading,setLoading]=useState(true), [search,setSearch]=useState('')
- const request=useRef(0)
- const fail=e=>setError(e.message || 'Não foi possível concluir. Tente novamente.')
- async function loadStudents() {
-  setLoading(true)
-  const {data,error}=await supabase.from('profiles').select('*').eq('role','student').or('mentor_id.eq.'+user.id+',mentor_id.is.null').order('full_name')
-  if(error) fail(error); else setStudents(data || [])
-  setLoading(false)
- }
- useEffect(()=>{loadStudents()},[user.id])
- async function selectStudent(student) {
-  const version=++request.current
-  setSelected(student);setForm(null);setGoals([]);setError('');setMessage('');setBusy(true)
-  const {data,error}=await supabase.from('goals').select('*, goal_blocks(*)').eq('student_id',student.id).order('due_date',{ascending:false})
-  if(version!==request.current)return
-  if(error)fail(error);else setGoals(data || [])
-  setBusy(false)
- }
- async function claim(student) {
-  setBusy(true);setError('')
-  const {data,error}=await supabase.from('profiles').update({mentor_id:user.id}).eq('id',student.id).is('mentor_id',null).select().single()
-  if(error)fail(error);else {await loadStudents();await selectStudent(data)}
-  setBusy(false)
- }
- function edit(goal) {
-  setForm({...goal});setBlocks([...goal.goal_blocks].sort((a,b)=>a.position-b.position));setMessage('');setError('')
- }
- async function save(e) {
-  e.preventDefault();setBusy(true);setError('');setMessage('')
-  try {
-   const payload={title:form.title.trim(),category:(form.category || "").trim(),pillar:form.pillar,due_date:form.due_date}
-   if(!payload.title)throw new Error('Preencha o título da meta.')
+ const {students,goals,loading,error,user,reload}=useWorkspace();const [params,setParams]=useSearchParams()
+ const student=params.get('aluno') || '';const all=params.get('periodo')==='todos'
+ const [offset,setOffset]=useState(0),[search,setSearch]=useState(''),[status,setStatus]=useState(''),[form,setForm]=useState(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('')
+ const [selected,setSelected]=useState([]),[batch,setBatch]=useState(false),[batchDate,setBatchDate]=useState(''),[model,setModel]=useState(false)
+ const mine=students.filter(s=>s.mentor_id===user.id),week=weekDates(offset)
+ const filtered=goals.filter(g=>(!student || g.student_id===student) && (all || (g.due_date>=week.from && g.due_date<=week.to)) && (g.title+' '+g.category+' '+(mine.find(s=>s.id===g.student_id)?.full_name || '')).toLowerCase().includes(search.toLowerCase()) && (!status || (status==='done'?g.completed:!g.completed)))
+ const name=id=>mine.find(s=>s.id===id)?.full_name || 'Aluno'
+ function changeFilter(key,value){const p=new URLSearchParams(params);if(value)p.set(key,value);else p.delete(key);setParams(p);setSelected([]);setForm(null)}
+ function edit(g){setForm({...g,goal_blocks:(g.goal_blocks || []).map(b=>({...b})).sort((a,b)=>a.position-b.position)});setNotice('');setModel(false)}
+ function newGoal(){setForm(fresh(student || mine[0]?.id || '',all?dateKey():week.from));setNotice('')}
+ function updateBlock(i,key,value){setForm(f=>({...f,goal_blocks:f.goal_blocks.map((b,j)=>i===j?{...b,[key]:value}:b)}))}
+ async function save(e){e.preventDefault();setBusy(true);setNotice('');let partial=false
+  try{
+   if(!form.title.trim() || !form.student_id)throw Error('Escolha um aluno e preencha o título.')
+   if(form.goal_blocks.some(b=>b.material_url && !/^https?:\/\//i.test(b.material_url.trim())))throw Error('Use links de materiais começando com https:// ou http://.')
+   const payload={student_id:form.student_id,title:form.title.trim(),category:(form.category || '').trim(),pillar:form.pillar,due_date:form.due_date}
    let id=form.id
-   if(id) {
-    const {error}=await supabase.from('goals').update(payload).eq('id',id).eq('student_id',selected.id).select().single();if(error)throw error
-   } else {
-    const {data,error}=await supabase.from('goals').insert({...payload,student_id:selected.id}).select().single();if(error)throw error
-    id=data.id;setForm(f=>({...f,id}))
+   const result=id?await supabase.from('goals').update(payload).eq('id',id).select().single():await supabase.from('goals').insert(payload).select().single()
+   if(result.error)throw result.error;id=result.data.id;partial=true;setForm(f=>({...f,id}))
+   for(let i=0;i<form.goal_blocks.length;i++){
+    const b=form.goal_blocks[i],p={title:b.title.trim(),topic:(b.topic || '').trim(),material_url:(b.material_url || '').trim(),position:i}
+    const r=b.id?await supabase.from('goal_blocks').update(p).eq('id',b.id).eq('goal_id',id).select().single():await supabase.from('goal_blocks').insert({...p,goal_id:id}).select().single()
+    if(r.error)throw r.error
+    setForm(f=>({...f,goal_blocks:f.goal_blocks.map((row,j)=>i===j?{...row,id:r.data.id}:row)}))
    }
-   for(let i=0;i<blocks.length;i++) {
-    const block=blocks[i]
-    const payload={title:block.title.trim(),topic:(block.topic || '').trim(),material_url:(block.material_url || '').trim(),position:i}
-    const result=block.id ? await supabase.from('goal_blocks').update(payload).eq('id',block.id).eq('goal_id',id).select().single() : await supabase.from('goal_blocks').insert({...payload,goal_id:id}).select().single()
-    if(result.error)throw result.error
-    block.id=result.data.id
-   }
-   await selectStudent(selected);setMessage('Meta salva com sucesso.')
-  } catch(e) {setError('Não foi possível salvar tudo. Confira os campos e tente novamente. ' + e.message)} finally {setBusy(false)}
+   setForm(null);await reload();setNotice('Meta salva com sucesso.')
+  }catch(e){setNotice((partial?'A meta foi salva, mas alguns blocos não. Revise e tente salvar novamente. ':'Não foi possível salvar. ')+e.message)}finally{setBusy(false)}
  }
- const mine=students.filter(s=>s.mentor_id===user.id && (s.full_name || '').toLowerCase().includes(search.toLowerCase()))
- const available=students.filter(s=>!s.mentor_id && (s.full_name || '').toLowerCase().includes(search.toLowerCase()))
- return <div className="max-w-6xl space-y-5">
- <h1 className="font-serif text-3xl">Alunos e metas</h1><p>Selecione um aluno para acompanhar e editar suas metas ou atribuir novas atividades.</p>
- {error && <p role="alert" className="bg-selo-vermelho-bg p-3 rounded">{error}</p>}{message && <p role="status" className="bg-selo-verde-bg p-3 rounded">{message}</p>}
- <div className="grid lg:grid-cols-[240px_1fr] gap-6"><section className="space-y-4">
- <input aria-label="Buscar aluno" placeholder="Buscar aluno" className={inputClass} value={search} onChange={e=>setSearch(e.target.value)}/>
- <h2 className="font-semibold">Meus alunos ({mine.length})</h2>
- {loading ? <p>Carregando alunos...</p> : mine.map(s=><button disabled={busy} key={s.id} onClick={()=>selectStudent(s)} className={'block w-full text-left p-3 border rounded '+(selected?.id===s.id?'bg-ink text-paper':'bg-white')}>{s.full_name || 'Aluno sem nome'}</button>)}
- {!loading && !mine.length && <p>Nenhum aluno vinculado.</p>}
- <h2 className="font-semibold">Disponíveis para vincular ({available.length})</h2>
- {available.map(s=><div className="p-3 border rounded" key={s.id}><p>{s.full_name || 'Aluno sem nome'}</p><button disabled={busy} className="underline mt-2" onClick={()=>claim(s)}>Vincular aluno</button></div>)}
- {!loading && !available.length && <p>Nenhum aluno aguardando vínculo.</p>}
- </section><section className="space-y-4 min-w-0">
- {!selected ? <p className="border border-dashed p-8 rounded">Escolha um aluno na lista ao lado.</p> : <>
- <div className="flex justify-between gap-3 items-center"><h2 className="text-2xl font-serif">{selected.full_name}</h2><button disabled={busy} onClick={()=>{setForm(blank());setBlocks([]);setMessage('')}} className="bg-ink text-paper rounded px-4 py-2">Nova meta</button></div>
- <p>{goals.length} metas · {goals.filter(g=>g.completed).length} concluídas · {Math.round(goals.reduce((n,g)=>n+(g.time_seconds || 0),0)/60)} minutos estudados</p>
- {form && <form onSubmit={save} className="bg-white border rounded p-4 space-y-3"><fieldset disabled={busy} className="space-y-3">
- <h3 className="font-semibold">{form.id?'Editar meta':'Atribuir meta'} — {selected.full_name}</h3>
- {['title','category','due_date'].map((key,i)=><label key={key} className="block">{['Título','Matéria','Data'][i]}<input className={inputClass} required={key!=='category'} type={key==='due_date'?'date':'text'} value={form[key] || ''} onChange={e=>setForm({...form,[key]:e.target.value})}/></label>)}
- <label className="block">Tipo de atividade<select className={inputClass} value={form.pillar} onChange={e=>setForm({...form,pillar:e.target.value})}>{PILLAR_ORDER.map(p=><option key={p} value={p}>{pillarOf(p).label}</option>)}</select></label>
- <h4>Blocos de estudo</h4>
- {blocks.map((b,i)=><div key={i} className="border rounded p-3 space-y-2">{['title','topic','material_url'].map((key,j)=><label className="block text-sm" key={key}>{['Nome do bloco','Assunto','Link do material'][j]}<input required={key==='title'} type={key==='material_url'?'url':'text'} className={inputClass} value={b[key] || ''} onChange={e=>setBlocks(blocks.map((row,k)=>k===i?{...row,[key]:e.target.value}:row))}/></label>)}{!b.id && <button type="button" onClick={()=>setBlocks(blocks.filter((_,k)=>k!==i))}>Remover bloco não salvo</button>}</div>)}
- <button type="button" className="underline" onClick={()=>setBlocks([...blocks,{title:'',topic:'',material_url:''}])}>Adicionar bloco</button>
- <div className="flex gap-4"><button className="bg-ink text-paper px-4 py-2 rounded" type="submit">{busy?'Salvando...':'Salvar meta'}</button><button type="button" onClick={()=>setForm(null)}>Cancelar</button></div>
- </fieldset></form>}
- <h3 className="font-semibold">Metas do aluno</h3>{busy && <p role="status">Carregando ou salvando...</p>}
- {goals.map(g=><article key={g.id} className="bg-white border rounded p-4 space-y-2"><h4 className="font-semibold">{g.title}</h4><p className="text-sm">{g.due_date.split('-').reverse().join('/')} · {g.category} · {g.completed?'Concluída':'Pendente'} · {g.goal_blocks.filter(b=>b.completed).length}/{g.goal_blocks.length} blocos</p><div className="flex gap-4"><button disabled={busy} className="underline" onClick={()=>edit(g)}>Editar meta</button><Link className="underline" to={'/metas/'+g.id}>Ver detalhes</Link></div></article>)}
- {!busy && !goals.length && <p>Este aluno ainda não possui metas. Use “Nova meta” para começar.</p>}
- </>}
- </section></div></div>
+ async function copyWeek(){if(!student)return;const previous=weekDates(offset-1);const source=goals.filter(g=>g.student_id===student && g.due_date>=previous.from && g.due_date<=previous.to);if(!source.length){setNotice('O aluno não possui metas na semana anterior.');return}setBusy(true);let count=0
+  try{for(const g of source){const r=await supabase.from('goals').insert({student_id:student,title:g.title,category:g.category,pillar:g.pillar,due_date:format(addDays(new Date(g.due_date+'T12:00:00'),7),'yyyy-MM-dd')}).select().single();if(r.error)throw r.error;count++;if(g.goal_blocks.length){const b=await supabase.from('goal_blocks').insert(g.goal_blocks.map((b,i)=>({goal_id:r.data.id,title:b.title,topic:b.topic,material_url:b.material_url,position:i})));if(b.error)throw b.error}}setNotice(count+' metas copiadas para a semana selecionada.')}catch(e){setNotice(count+' metas criadas antes da falha. Confira a lista antes de copiar novamente. '+e.message)}finally{await reload();setBusy(false)}
+ }
+ async function saveBatch(e){e.preventDefault();setBusy(true);const r=await supabase.from('goals').update({due_date:batchDate}).in('id',selected).select('id');if(r.error)setNotice(r.error.message);else{setNotice(r.data.length+' metas reagendadas.');setBatch(false);setSelected([]);await reload()}setBusy(false)}
+ function duplicate(g){edit({...g,...fresh(student || g.student_id,all?dateKey():week.from),title:g.title,category:g.category,pillar:g.pillar,goal_blocks:g.goal_blocks.map(b=>({title:b.title,topic:b.topic,material_url:b.material_url}))});setForm(f=>({...f,id:undefined}));setModel(false)}
+ return <><PageTitle title="Metas semanais" subtitle="Crie, ajuste e organize as metas de cada aluno."><button className="btn primary" disabled={busy || !mine.length} onClick={newGoal}>＋ Nova meta</button></PageTitle>
+ {(error || notice) && <p className={'notice '+(error?'error':'')} role="status">{error || notice}</p>}
+ <fieldset disabled={busy} className="toolbar"><label className="inline-field">Aluno<select className="field" aria-label="Aluno" value={student} onChange={e=>changeFilter('aluno',e.target.value)}><option value="">Todos os alunos</option>{mine.map(s=><option key={s.id} value={s.id}>{s.full_name || 'Aluno sem nome'}</option>)}</select></label><WeekPicker offset={offset} onChange={n=>{setOffset(n);changeFilter('periodo','')}}/><label className="check-label"><input type="checkbox" checked={all} onChange={e=>changeFilter('periodo',e.target.checked?'todos':'')}/>Todo o histórico</label><div className="toolbar-actions"><button className="btn" disabled={!student || all} onClick={copyWeek}>Copiar semana anterior</button><button className="btn" disabled={!goals.length} onClick={()=>setModel(!model)}>Usar meta como modelo</button></div></fieldset>
+ {model && <Card title="Escolha uma meta como modelo" subtitle="Uma cópia será aberta para revisão. Só será criada ao salvar.">{goals.map(g=><button disabled={busy} key={g.id} className="model-option" onClick={()=>duplicate(g)}>{g.title}<span>{name(g.student_id)} →</span></button>)}</Card>}
+ {!form && <div className="stat-grid three"><Stat title="Metas no filtro" value={filtered.length} icon="target"/><Stat title="Concluídas" value={filtered.filter(g=>g.completed).length} icon="check"/><Stat title="Alunos no filtro" value={new Set(filtered.map(g=>g.student_id)).size} icon="users" tone="blue"/></div>}
+ <div className={'goals-workspace '+(form?'editing':'')}><div className="stack"><Card title={student?'Metas de '+name(student):'Acompanhamento da semana'} subtitle={filtered.length+' metas encontradas'}><fieldset disabled={busy} className="list-toolbar"><input className="field" placeholder="Buscar aluno ou meta" aria-label="Buscar aluno ou meta" value={search} onChange={e=>{setSearch(e.target.value);setSelected([])}}/><select className="field" aria-label="Filtrar status" value={status} onChange={e=>{setStatus(e.target.value);setSelected([])}}><option value="">Todos os status</option><option value="done">Concluídas</option><option value="pending">Não concluídas</option></select></fieldset>
+ <div className="bulk-toolbar"><label className="check-label"><input type="checkbox" disabled={busy || !filtered.length} checked={!!filtered.length && filtered.every(g=>selected.includes(g.id))} onChange={e=>setSelected(e.target.checked?filtered.map(g=>g.id):[])}/>Selecionar todas</label><button className="btn" disabled={busy || !selected.length} onClick={()=>setBatch(!batch)}>Editar em lote {selected.length>0?'('+selected.length+')':''}</button></div>
+ {batch && <form onSubmit={saveBatch} className="bulk-form"><label>Novo prazo para {selected.length} metas<input type="date" className="field" required value={batchDate} onChange={e=>setBatchDate(e.target.value)}/></label><button disabled={busy || !selected.length} className="btn primary">Aplicar prazo</button></form>}
+ {loading?<Empty>Carregando metas...</Empty>:filtered.length?<div className="table-scroll"><table className="goals-table"><thead><tr><th/><th>{student?'Meta':'Aluno / Meta'}</th><th>Prazo</th><th>Progresso</th><th>Status</th><th>Ações</th></tr></thead><tbody>{filtered.map(g=><tr className={form?.id===g.id?'selected-row':''} key={g.id}><td><input aria-label={'Selecionar '+g.title} type="checkbox" checked={selected.includes(g.id)} disabled={busy} onChange={e=>setSelected(e.target.checked?[...selected,g.id]:selected.filter(id=>id!==g.id))}/></td><td>{!student && <small>{name(g.student_id)}</small>}<button className="goal-title" disabled={busy} onClick={()=>edit(g)}>{g.title}</button><span className="subject-tag">{g.category || pillarOf(g.pillar).label}</span></td><td>{format(new Date(g.due_date+'T12:00:00'),'dd/MM')}</td><td><Progress goal={g}/></td><td><Status goal={g}/></td><td><div className="row-actions"><button className="icon-btn" aria-label={'Editar '+g.title} disabled={busy} onClick={()=>edit(g)}><Icon name="edit" size={18}/></button><Link className="text-action" to={'/metas/'+g.id}>Abrir</Link></div></td></tr>)}</tbody></table></div>:<Empty>Nenhuma meta neste filtro. Consulte o histórico ou crie uma nova meta.</Empty>}
+ <button className="add-goal" disabled={busy || !mine.length} onClick={newGoal}>＋ Adicionar meta</button></Card><div className="helper-card"><Icon name="users"/><div><strong>Edição em lote</strong><p>Selecione metas para ajustar os prazos em conjunto.</p></div></div></div>
+ {form && <section className="surface goal-editor"><div className="card-heading"><h2><Icon name="edit"/>{form.id?'Editar meta':'Nova meta'}</h2></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields"><label>Aluno<select className="field" required disabled={!!form.id} value={form.student_id} onChange={e=>setForm({...form,student_id:e.target.value})}>{mine.map(s=><option value={s.id} key={s.id}>{s.full_name || 'Aluno'}</option>)}</select></label><label>Título da meta<input className="field" required value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label><div className="field-grid"><label>Disciplina<input className="field" value={form.category || ''} onChange={e=>setForm({...form,category:e.target.value})}/></label><label>Prazo<input className="field" type="date" required value={form.due_date} onChange={e=>setForm({...form,due_date:e.target.value})}/></label></div><label>Tipo de atividade<select className="field" value={form.pillar} onChange={e=>setForm({...form,pillar:e.target.value})}>{PILLAR_ORDER.map(p=><option key={p} value={p}>{pillarOf(p).label}</option>)}</select></label>
+ <h3>Blocos e orientações</h3><p className="muted small">Organize os assuntos e materiais que o aluno deve estudar.</p>{form.goal_blocks.map((b,i)=><div className="block-editor" key={b.id || i}><label>Nome do bloco<input className="field" required value={b.title} onChange={e=>updateBlock(i,'title',e.target.value)}/></label><label>Assunto e orientações<textarea className="field" rows="3" value={b.topic || ''} onChange={e=>updateBlock(i,'topic',e.target.value)}/></label><label>Material de apoio<input className="field" type="url" placeholder="https://" value={b.material_url || ''} onChange={e=>updateBlock(i,'material_url',e.target.value)}/></label>{!b.id && <button type="button" className="text-action" onClick={()=>setForm({...form,goal_blocks:form.goal_blocks.filter((_,j)=>i!==j)})}>Remover bloco não salvo</button>}</div>)}
+ <button className="btn" type="button" onClick={()=>setForm({...form,goal_blocks:[...form.goal_blocks,{title:'',topic:'',material_url:''}]})}>＋ Adicionar bloco</button><div className="editor-footer"><button type="button" className="btn" onClick={()=>setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy?'Salvando...':'Salvar alterações'}</button></div></fieldset></form></section>}</div></>
 }

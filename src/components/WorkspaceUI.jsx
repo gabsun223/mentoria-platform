@@ -1,0 +1,18 @@
+import { addDays, addWeeks, format, startOfWeek } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
+export const dateKey = (date = new Date()) => format(date, 'yyyy-MM-dd')
+export const weekDates = offset => { const start=startOfWeek(addWeeks(new Date(),offset),{weekStartsOn:1}); return {start,end:addDays(start,6),from:dateKey(start),to:dateKey(addDays(start,6))} }
+export const hours = seconds => { const minutes=Math.floor((seconds || 0)/60); return Math.floor(minutes/60)+'h '+String(minutes%60).padStart(2,'0')+'min' }
+export function Icon({name='home',size=21}) {
+ const paths={home:'M3 10 12 3l9 7v11h-6v-7H9v7H3Z',users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 4a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',target:'M21 12a9 9 0 1 1-9-9M17 12a5 5 0 1 1-5-5M12 12l9-9M16 3h5v5',calendar:'M4 5h16v16H4ZM8 2v6M16 2v6M4 10h16',chart:'M4 21V12h4v9M10 21V7h4v14M16 21V3h4v18',file:'M5 3h9l5 5v13H5ZM14 3v6h5M8 13h8M8 17h6',clock:'M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',check:'m5 12 4 4L19 6',alert:'M12 3 2 21h20ZM12 9v5M12 17v1',settings:'M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M5.5 18.5l2-2M16.5 7.5l2-2M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',arrow:'M5 12h14m-5-5 5 5-5 5',edit:'m4 16 12-12 4 4L8 20H4ZM14 6l4 4',play:'m9 5 11 7-11 7Z',leaf:'M12 21C3 18 2 9 4 5c7 0 9 6 8 16ZM12 21C11 9 15 3 22 2c1 10-2 17-10 19ZM12 21l6-13'}
+ return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] || paths.home}/></svg>
+}
+export function Avatar({name=''}) {return <span className="avatar">{name.split(' ').filter(Boolean).slice(0,2).map(s=>s[0]).join('') || 'M'}</span>}
+export function PageTitle({title,subtitle,children}) {return <div className="page-title"><div><h1>{title}</h1><p>{subtitle}</p></div>{children}</div>}
+export function Card({title,subtitle,action,children,className=''}) {return <section className={'surface '+className}><div className="card-heading"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action}</div>{children}</section>}
+export function Stat({title,value,caption,icon='chart',tone=''}) {return <div className="stat"><span className={'stat-icon '+tone}><Icon name={icon} size={25}/></span><div><p>{title}</p><strong>{value}</strong><small>{caption}</small></div></div>}
+export function Empty({children}) {return <div className="empty-state">{children}</div>}
+export function WeekPicker({offset,onChange}) {const {start,end}=weekDates(offset);return <div className="week-picker"><button className="btn icon-btn" aria-label="Semana anterior" onClick={()=>onChange(offset-1)}>‹</button><span>{format(start,'dd MMM',{locale:ptBR})} – {format(end,'dd MMM, yyyy',{locale:ptBR})}</span><button className="btn icon-btn" aria-label="Próxima semana" onClick={()=>onChange(offset+1)}>›</button>{offset!==0 && <button className="text-action" onClick={()=>onChange(0)}>Esta semana</button>}</div>}
+export function goalStatus(g) {if(g.completed)return 'Concluída';if(g.due_date<dateKey())return 'Atrasada';if(g.time_seconds>0 || g.goal_blocks?.some(b=>b.completed))return 'Em andamento';return 'Pendente'}
+export function Status({goal}) {const status=goalStatus(goal);return <span className={'status '+({'Concluída':'done','Atrasada':'late','Em andamento':'progress'}[status] || '')}><i/>{status}</span>}
+export function Progress({goal}) {const blocks=goal.goal_blocks || [];const percent=goal.completed?100:blocks.length?Math.round(blocks.filter(b=>b.completed).length/blocks.length*100):0;return <div className="goal-progress"><div className="progress-track"><span style={{width:percent+'%'}}/></div><small>{percent}%</small></div>}
