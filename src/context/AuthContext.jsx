@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 
 const AuthContext = createContext(null)
@@ -7,8 +7,11 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const activeUserId = useRef(undefined)
+  const profileRequest = useRef(0)
 
   const loadProfile = useCallback(async (userId) => {
+    const request = ++profileRequest.current
     if (!userId) {
       setProfile(null)
       return
@@ -19,6 +22,7 @@ export function AuthProvider({ children }) {
       .eq('id', userId)
       .single()
 
+    if (request !== profileRequest.current || activeUserId.current !== userId) return
     if (error) {
       // eslint-disable-next-line no-console
       console.error('Erro ao carregar perfil:', error.message)
@@ -29,19 +33,38 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      loadProfile(session?.user?.id).finally(() => setLoading(false))
-    })
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setLoading(true)
+    let active = true
+    let generation = 0
+    let pending
+    activeUserId.current = undefined
+    // INITIAL_SESSION also covers startup. Same-account events on tab focus or
+    // token refresh must not unmount protected pages and discard draft forms.
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return
+      const nextId = nextSession?.user?.id ?? null
+      setSession(nextSession)
+      if (nextId === activeUserId.current) return
+      activeUserId.current = nextId
+      const version = ++generation
+      ++profileRequest.current
+      clearTimeout(pending)
       setProfile(null)
-      setSession(session)
-      loadProfile(session?.user?.id).finally(() => setLoading(false))
+      setLoading(!!nextId)
+      if (!nextId) return
+      // Run profile queries outside Supabase's auth callback/lock.
+      pending = setTimeout(() => {
+        loadProfile(nextId).finally(() => {
+          if (active && version === generation) setLoading(false)
+        })
+      }, 0)
     })
 
-    return () => listener.subscription.unsubscribe()
+    return () => {
+      active = false
+      ++profileRequest.current
+      clearTimeout(pending)
+      listener.subscription.unsubscribe()
+    }
   }, [loadProfile])
 
   const signUp = async ({ email, password, fullName }) => {

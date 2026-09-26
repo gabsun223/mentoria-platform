@@ -68,7 +68,7 @@ export default function GoalDetail() {
     }
 
     setLoading(false)
-  }, [id, user])
+  }, [id, user?.id])
 
   useEffect(() => {
     load()
@@ -207,6 +207,8 @@ export default function GoalDetail() {
           })}
         </p>
       </div>
+
+      {goal.teacher_notes && <section className="surface mb-4"><div className="card-heading"><h2>Observações do professor</h2></div><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{goal.teacher_notes}</p></section>}
 
       <div className="mb-4">
         {notice && <p className="notice error" role="alert">{notice}</p>}

@@ -18,6 +18,8 @@ await db.exec(await sql('migrations/0006_goal_catalog.sql'))
 await db.exec(await sql('migrations/0006_goal_catalog.sql'))
 await db.exec(await sql('migrations/0007_simple_goal_fields.sql'))
 await db.exec(await sql('migrations/0007_simple_goal_fields.sql'))
+await db.exec(await sql('migrations/0008_teacher_notes.sql'))
+await db.exec(await sql('migrations/0008_teacher_notes.sql'))
 const mentor='10000000-0000-4000-8000-000000000001',student='10000000-0000-4000-8000-000000000002',other='10000000-0000-4000-8000-000000000003'
 await db.exec(`insert into auth.users values('${mentor}'),('${student}'),('${other}');
 insert into profiles(id,role) values('${mentor}','mentor'),('${other}','mentor');
@@ -28,12 +30,14 @@ async function scalar(q,args=[]){return Object.values((await db.query(q,args)).r
 await login(mentor)
 const template=await scalar(`insert into goal_templates(title,category,topic,blocks) values('Leitura','Constitucional','Direitos fundamentais','[{"title":"Constituição","topic":"Art. 5","material_url":"https://example.com"}]') returning id`)
 const pack=await scalar(`insert into goal_week_packs(name,items) values('Semana 1',$1) returning id`,[JSON.stringify([{template_id:template,weekday:0},{template_id:template,weekday:6}])])
+await db.query('update goal_templates set teacher_notes=$1 where id=$2',['Leia com atenção.\nRevise os exemplos.',template])
 assert.equal(await scalar(`select import_goal_week_pack($1,$2,'2026-09-28')`,[pack,student]),2)
 const goals=(await db.query('select * from goals order by due_date')).rows
 assert.equal(goals.length,2);assert.equal(goals[0].due_date.toISOString().slice(0,10),'2026-09-28');assert.equal(goals[1].due_date.toISOString().slice(0,10),'2026-10-04')
 assert.equal(goals[0].time_seconds,0);assert.equal(goals[0].completed,false)
 assert.equal(await scalar('select count(*)::integer from goal_blocks'),2)
 assert.equal(goals[0].topic,'Direitos fundamentais')
+assert.equal(goals[0].teacher_notes,'Leia com atenção.\nRevise os exemplos.')
 assert.equal(goals[0].activity_type,'teoria')
 assert.equal(goals[0].material_url,'https://example.com')
 await assert.rejects(()=>db.query(`select import_goal_week_pack($1,$2,'2026-09-28')`,[pack,student]),/já foi importado/)

@@ -10,5 +10,6 @@ export default function GoalDefinitionFields({ value, onChange, subjects = [] })
     <label>Assunto<input required className="field" value={value.topic} onChange={e => update('topic', e.target.value)}/></label>
     <label>Categoria<select aria-label="Categoria" className="field" value={value.activity_type} onChange={e => update('activity_type', e.target.value)}>{PILLAR_ORDER.map(key => <option key={key} value={key}>{pillarOf(key).label}</option>)}</select></label>
     <label>Link do Material<input className="field" type="url" placeholder="https://" value={value.material_url} onChange={e => update('material_url', e.target.value)}/></label>
+    <label>Observações do professor<textarea aria-label="Observações do professor" className="field" rows={4} value={value.teacher_notes || ''} onChange={e => update('teacher_notes', e.target.value)}/></label>
   </>
 }

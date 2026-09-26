@@ -25,7 +25,7 @@ export default function ExamHistory() {
       .order('exam_date', { ascending: false })
     if (!error) setExams(data ?? [])
     setLoading(false)
-  }, [user])
+  }, [user?.id])
 
   useEffect(() => {
     load()

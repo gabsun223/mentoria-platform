@@ -35,3 +35,6 @@ Sem a migração, catálogo/pacotes exibem uma mensagem de ativação pendente. 
 `tests/catalog-browser.cjs` usa Playwright com Edge e o servidor local na porta 5191. Defina `PLAYWRIGHT_MODULE` com o caminho do pacote caso esteja fora do projeto, e `QA_OUTPUT` para as capturas. Todos os pedidos ao Supabase são interceptados com dados isolados: não cria contas ou metas reais. Cobre catálogo, busca/contagem, pacotes, importação, calendário, celular, edição de resultados do mentor/aluno e cronômetro.
 
 O build é `npm run build`. A migração e o teste de permissões são separados dos testes de interface: os dados simulados no navegador não comprovam persistência em produção.
+
+As metas e os modelos incluem Observações do professor, exibidas ao aluno e copiadas tanto na importação individual quanto por pacote. A migração 0008_teacher_notes.sql adiciona esse campo sem alterar registros existentes.
+A renovação da sessão na mesma conta preserva os formulários montados; sair ou trocar de conta continua limpando o contexto anterior.
