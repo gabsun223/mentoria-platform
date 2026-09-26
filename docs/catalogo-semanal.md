@@ -2,6 +2,12 @@
 
 O mentor tem três áreas: **Catálogo de metas**, **Pacotes semanais** e **Metas semanais**.
 
+No painel semanal, primeiro escolha um aluno. Só então aparecem sua identificação e suas metas para o período. Os botões de copiar semana/modelo, a busca de aluno/meta no quadro e o aviso de edição em lote foram removidos.
+
+Marcar uma ou mais metas exibe imediatamente o campo de nova data, com **Aplicar data** para salvar. Desmarcar todas ou trocar de aluno/período limpa a seleção.
+
+**Adicionar meta** abre um quadro sobre o calendário, mantendo a posição da página. Nele, filtre o catálogo por texto e matéria e importe diretamente para o dia escolhido. **Criar outra meta** abre o formulário abaixo. A opção **Também incluir esta meta no catálogo** é desmarcada por padrão; quando marcada, exige matéria e assunto e guarda o modelo sem os resultados do aluno. Em falha parcial, o formulário conserva os identificadores para que uma nova tentativa conclua o salvamento sem criar outra meta.
+
 - O catálogo contém modelos privados, agrupados por matéria, com título, assunto, atividade e blocos de orientação/material. A busca considera matéria, assunto e título; a contagem de assuntos considera nomes distintos.
 - Os pacotes são identificados por um nome livre (ex.: “Semana 1 — Fundamentos”) e distribuem modelos de segunda a domingo. É possível editar essa distribuição sem alterar metas já lançadas.
 - Em Metas semanais, o mentor escolhe o aluno e a semana, consulta a prévia e importa o pacote. A importação é uma transação: cria todas as metas e blocos, ou nenhuma. O mesmo pacote não pode ser importado duas vezes para o mesmo aluno/semana. Pacotes diferentes podem ser combinados.

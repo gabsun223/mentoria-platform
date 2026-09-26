@@ -1,82 +1,153 @@
-import WeeklyGoalCalendar from '../components/WeeklyGoalCalendar'
-import GoalResultsFields, { resultsPayload } from '../components/GoalResultsFields'
-import useGoalCatalog from '../lib/useGoalCatalog'
 import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { addDays, format, startOfWeek } from 'date-fns'
+import { format, startOfWeek } from 'date-fns'
+import WeeklyGoalCalendar from '../components/WeeklyGoalCalendar'
+import WeekGoalPicker from '../components/WeekGoalPicker'
+import GoalResultsFields from '../components/GoalResultsFields'
+import useGoalCatalog from '../lib/useGoalCatalog'
 import useWorkspace from '../lib/useWorkspace'
+import { saveAssignedGoal } from '../lib/saveAssignedGoal'
 import { supabase } from '../supabaseClient'
 import { PILLAR_ORDER, pillarOf } from '../lib/pillars'
-import { PageTitle, WeekPicker, weekDates, dateKey, Card, Empty, Icon, Stat } from '../components/WorkspaceUI'
-const fresh = (student,date) => ({student_id:student,title:'',category:'',pillar:'leitura',due_date:date,time_seconds:0,questions_total:null,questions_correct:null,completed:false,goal_blocks:[]})
-export default function MentorPanel() {
- const {students,goals,loading,error,user,reload}=useWorkspace();const [params,setParams]=useSearchParams()
- const catalog=useGoalCatalog(); const [source,setSource]=useState(params.get('pacote')?'pack':''),[catalogSearch,setCatalogSearch]=useState(''),[packId,setPackId]=useState(params.get('pacote') || '')
- const student=params.get('aluno') || '';const all=params.get('periodo')==='todos'
- const [offset,setOffset]=useState(0),[search,setSearch]=useState(''),[status,setStatus]=useState(''),[form,setForm]=useState(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState('')
- const [selected,setSelected]=useState([]),[batch,setBatch]=useState(false),[batchDate,setBatchDate]=useState(''),[model,setModel]=useState(false)
- const editorRef=useRef(null)
- useEffect(()=>{if(source)document.querySelector('.catalog-source')?.scrollIntoView({behavior:'smooth',block:'start'});else if(form)editorRef.current?.scrollIntoView({behavior:'smooth',block:'start'})},[source,!!form,form?.id])
- const mine=students.filter(s=>s.mentor_id===user.id),week=weekDates(offset)
- const filtered=goals.filter(g=>(!student || g.student_id===student) && (all || (g.due_date>=week.from && g.due_date<=week.to)) && (g.title+' '+g.category+' '+(mine.find(s=>s.id===g.student_id)?.full_name || '')).toLowerCase().includes(search.toLowerCase()) && (!status || (status==='done'?g.completed:!g.completed)))
- const name=id=>mine.find(s=>s.id===id)?.full_name || 'Aluno'
- function changeFilter(key,value){const p=new URLSearchParams(params);if(value)p.set(key,value);else p.delete(key);setParams(p);setSelected([]);setForm(null)}
- function edit(g){setForm({...g,originalSeconds:g.time_seconds,goal_blocks:(g.goal_blocks || []).map(b=>({...b})).sort((a,b)=>a.position-b.position)});setNotice('');setModel(false)}
- function newGoal(day){setForm(fresh(student || mine[0]?.id || '',typeof day==='string'?day:all?dateKey():week.from));setNotice('')}
- function updateBlock(i,key,value){setForm(f=>({...f,goal_blocks:f.goal_blocks.map((b,j)=>i===j?{...b,[key]:value}:b)}))}
- async function save(e){e.preventDefault();setBusy(true);setNotice('');let partial=false
-  try{
-   if(!form.title.trim() || !form.student_id)throw Error('Escolha um aluno e preencha o título.')
-   if(form.goal_blocks.some(b=>b.material_url && !/^https?:\/\//i.test(b.material_url.trim())))throw Error('Use links de materiais começando com https:// ou http://.')
-   const payload={student_id:form.student_id,title:form.title.trim(),category:(form.category || '').trim(),pillar:form.pillar,due_date:form.due_date}
-   const measures=resultsPayload(form)
-   payload.time_seconds=measures.time_seconds
-   if(!catalog.error && !catalog.loading){payload.questions_total=measures.questions_total;payload.questions_correct=measures.questions_correct}
-   let id=form.id
-   const result=id?await supabase.from('goals').update(payload).eq('id',id).eq('time_seconds',form.originalSeconds ?? 0).select().single():await supabase.from('goals').insert(payload).select().single()
-   if(result.error)throw Error(result.error.code==='PGRST116'?'O tempo foi alterado em outra tela. Reabra a meta para atualizar os dados.':result.error.message);id=result.data.id;partial=true;setForm(f=>({...f,id,originalSeconds:result.data.time_seconds}))
-   for(let i=0;i<form.goal_blocks.length;i++){
-    const b=form.goal_blocks[i],p={title:b.title.trim(),topic:(b.topic || '').trim(),material_url:(b.material_url || '').trim(),position:i}
-    const r=b.id?await supabase.from('goal_blocks').update(p).eq('id',b.id).eq('goal_id',id).select().single():await supabase.from('goal_blocks').insert({...p,goal_id:id}).select().single()
-    if(r.error)throw r.error
-    setForm(f=>({...f,goal_blocks:f.goal_blocks.map((row,j)=>i===j?{...row,id:r.data.id}:row)}))
-   }
-   setForm(null);await reload();setNotice('Meta salva com sucesso.')
-  }catch(e){setNotice((partial?'A meta foi salva, mas alguns blocos não. Revise e tente salvar novamente. ':'Não foi possível salvar. ')+e.message)}finally{setBusy(false)}
- }
- async function copyWeek(){if(!student)return;const previous=weekDates(offset-1);const source=goals.filter(g=>g.student_id===student && g.due_date>=previous.from && g.due_date<=previous.to);if(!source.length){setNotice('O aluno não possui metas na semana anterior.');return}setBusy(true);let count=0
-  try{for(const g of source){const r=await supabase.from('goals').insert({student_id:student,title:g.title,category:g.category,pillar:g.pillar,due_date:format(addDays(new Date(g.due_date+'T12:00:00'),7),'yyyy-MM-dd')}).select().single();if(r.error)throw r.error;count++;if(g.goal_blocks.length){const b=await supabase.from('goal_blocks').insert(g.goal_blocks.map((b,i)=>({goal_id:r.data.id,title:b.title,topic:b.topic,material_url:b.material_url,position:i})));if(b.error)throw b.error}}setNotice(count+' metas copiadas para a semana selecionada.')}catch(e){setNotice(count+' metas criadas antes da falha. Confira a lista antes de copiar novamente. '+e.message)}finally{await reload();setBusy(false)}
- }
- async function saveBatch(e){e.preventDefault();setBusy(true);const r=await supabase.from('goals').update({due_date:batchDate}).in('id',selected).select('id');if(r.error)setNotice(r.error.message);else{setNotice(r.data.length+' metas reagendadas.');setBatch(false);setSelected([]);await reload()}setBusy(false)}
- function duplicate(g){edit({...g,...fresh(student || g.student_id,all?dateKey():week.from),title:g.title,category:g.category,pillar:g.pillar,goal_blocks:g.goal_blocks.map(b=>({title:b.title,topic:b.topic,material_url:b.material_url}))});setForm(f=>({...f,id:undefined}));setModel(false)}
- async function importPack(){setBusy(true);setNotice('');try{
-   const r=await supabase.rpc('import_goal_week_pack',{p_pack:packId,p_student:student,p_week:week.from});if(r.error)throw r.error
-   setNotice(r.data+' metas importadas.');setSource('');await reload()
-  }catch(e){setNotice(e.message)}finally{setBusy(false)}}
- function useTemplate(t){setForm({...fresh(form?.student_id || student || mine[0]?.id || '',form?.due_date || week.from),title:t.title,category:t.category,pillar:t.pillar,goal_blocks:[...(t.topic?[{title:'Assunto',topic:t.topic,material_url:''}]:[]),...t.blocks.map(b=>({...b}))]});setSource('')}
- const calendarStarts=all?[...new Set(filtered.map(g=>dateKey(startOfWeek(new Date(g.due_date+'T12:00:00'),{weekStartsOn:1}))))].sort():[week.from]
- return <><PageTitle title="Metas semanais" subtitle="Crie, ajuste e organize as metas de cada aluno."><button className="btn primary" disabled={busy || !mine.length} onClick={newGoal}>＋ Nova meta</button><button className="btn" disabled={busy} onClick={()=>setSource(source==='catalog'?'':'catalog')}>Buscar no catálogo</button><button className="btn" disabled={busy} onClick={()=>setSource(source==='pack'?'':'pack')}>Importar pacote semanal</button></PageTitle>
- {(error || notice) && <p className={'notice '+(error?'error':'')} role="status">{error || notice}</p>}
- <fieldset disabled={busy} className="toolbar"><label className="inline-field">Aluno<select className="field" aria-label="Aluno" value={student} onChange={e=>changeFilter('aluno',e.target.value)}><option value="">Todos os alunos</option>{mine.map(s=><option key={s.id} value={s.id}>{s.full_name || 'Aluno sem nome'}</option>)}</select></label><WeekPicker offset={offset} onChange={n=>{setOffset(n);changeFilter('periodo','')}}/><label className="check-label"><input type="checkbox" checked={all} onChange={e=>changeFilter('periodo',e.target.checked?'todos':'')}/>Todo o histórico</label><div className="toolbar-actions"><button className="btn" disabled={!student || all} onClick={copyWeek}>Copiar semana anterior</button><button className="btn" disabled={!goals.length} onClick={()=>setModel(!model)}>Usar meta como modelo</button></div></fieldset>
- {source && <Card className="catalog-source" title={source==='catalog'?'Metas padrão por matéria':'Importar pacote semanal'} action={<button className="btn" disabled={busy} onClick={()=>setSource('')}>Fechar</button>}>
- {catalog.error?<p className="notice">{catalog.error}</p>:catalog.loading?<Empty>Carregando catálogo…</Empty>:source==='catalog'?<>
- <div className="toolbar"><input className="field" aria-label="Buscar meta padrão" placeholder="Matéria, assunto ou título" value={catalogSearch} onChange={e=>setCatalogSearch(e.target.value)}/><Link className="btn" to="/mentor/catalogo">Organizar catálogo</Link></div>
- {[...new Set(catalog.templates.map(t=>t.category))].map(c=>{const rows=catalog.templates.filter(t=>t.category===c);const matches=rows.filter(t=>(t.category+' '+t.title+' '+t.topic).toLowerCase().includes(catalogSearch.toLowerCase()));return matches.length>0 && <section className="catalog-subject" key={c}><h3>{c} · {rows.length} metas · {new Set(rows.map(t=>t.topic).filter(Boolean)).size} assuntos</h3>{matches.map(t=><button className="model-option" disabled={busy || !mine.length} key={t.id} onClick={()=>useTemplate(t)}><span>{t.title}<small>{t.topic}</small></span><span>Usar →</span></button>)}</section>})}
- {!catalog.templates.length && <Empty>Seu catálogo está vazio. Cadastre metas padrão para reutilizá-las.</Empty>}</>:<>
- <div className="toolbar"><select aria-label="Pacote semanal" className="field" value={packId} onChange={e=>setPackId(e.target.value)}><option value="">Escolha o pacote</option>{catalog.packs.map(p=><option key={p.id} value={p.id}>{p.name} · {p.items.length} metas</option>)}</select><Link className="btn" to="/mentor/pacotes">Organizar pacotes</Link></div>
- <p className="muted">{student?'Aluno: '+name(student):'Selecione um aluno no filtro abaixo.'} · Semana: {format(week.start,'dd/MM/yyyy')} a {format(week.end,'dd/MM/yyyy')}. As metas existentes serão mantidas.</p>
- {packId && <div className="pack-preview">{['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map((d,i)=><div key={d}><strong>{d}</strong>{catalog.packs.find(p=>p.id===packId)?.items.filter(it=>it.weekday===i).map((it,j)=><p key={j}>{catalog.templates.find(t=>t.id===it.template_id)?.title || 'Meta indisponível'}</p>)}</div>)}</div>}
- <button className="btn primary" disabled={busy || !student || !packId || all} onClick={importPack}>Importar pacote para esta semana</button>{all && <p>Desmarque “Todo o histórico” para escolher a semana.</p>}</>}
- </Card>}
- {model && <Card title="Escolha uma meta como modelo" subtitle="Uma cópia será aberta para revisão. Só será criada ao salvar.">{goals.map(g=><button disabled={busy} key={g.id} className="model-option" onClick={()=>duplicate(g)}>{g.title}<span>{name(g.student_id)} →</span></button>)}</Card>}
- {!form && <div className="stat-grid three"><Stat title="Metas no filtro" value={filtered.length} icon="target"/><Stat title="Concluídas" value={filtered.filter(g=>g.completed).length} icon="check"/><Stat title="Alunos no filtro" value={new Set(filtered.map(g=>g.student_id)).size} icon="users" tone="blue"/></div>}
- <div className={'goals-workspace '+(form?'editing':'')}><div className="stack"><Card title={student?'Metas de '+name(student):'Acompanhamento da semana'} subtitle={filtered.length+' metas encontradas'}><fieldset disabled={busy} className="list-toolbar"><input className="field" placeholder="Buscar aluno ou meta" aria-label="Buscar aluno ou meta" value={search} onChange={e=>{setSearch(e.target.value);setSelected([])}}/><select className="field" aria-label="Filtrar status" value={status} onChange={e=>{setStatus(e.target.value);setSelected([])}}><option value="">Todos os status</option><option value="done">Concluídas</option><option value="pending">Não concluídas</option></select></fieldset>
- <div className="bulk-toolbar"><label className="check-label"><input type="checkbox" disabled={busy || !filtered.length} checked={!!filtered.length && filtered.every(g=>selected.includes(g.id))} onChange={e=>setSelected(e.target.checked?filtered.map(g=>g.id):[])}/>Selecionar todas</label><button className="btn" disabled={busy || !selected.length} onClick={()=>setBatch(!batch)}>Editar em lote {selected.length>0?'('+selected.length+')':''}</button></div>
- {batch && <form onSubmit={saveBatch} className="bulk-form"><label>Novo prazo para {selected.length} metas<input type="date" className="field" required value={batchDate} onChange={e=>setBatchDate(e.target.value)}/></label><button disabled={busy || !selected.length} className="btn primary">Aplicar prazo</button></form>}
- {loading?<Empty>Carregando metas...</Empty>:calendarStarts.length?calendarStarts.map(start=><section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start+'T12:00:00'),'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start+'T12:00:00')} goals={filtered} onEdit={edit} onAdd={newGoal} studentName={!student?name:undefined} selected={selected} disabled={busy || !mine.length} onSelect={(id,checked)=>setSelected(checked?[...selected,id]:selected.filter(x=>x!==id))}/></section>):<Empty>Nenhuma meta neste filtro.</Empty>}
+import { PageTitle, WeekPicker, weekDates, dateKey, Card, Empty, Icon, Avatar } from '../components/WorkspaceUI'
 
- <button className="add-goal" disabled={busy || !mine.length} onClick={newGoal}>＋ Adicionar meta</button></Card><div className="helper-card"><Icon name="users"/><div><strong>Edição em lote</strong><p>Selecione metas para ajustar os prazos em conjunto.</p></div></div></div>
- {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><h2><Icon name="edit"/>{form.id?'Editar meta':'Nova meta'}</h2></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields"><label>Aluno<select className="field" required disabled={!!form.id} value={form.student_id} onChange={e=>setForm({...form,student_id:e.target.value})}>{mine.map(s=><option value={s.id} key={s.id}>{s.full_name || 'Aluno'}</option>)}</select></label><label>Título da meta<input className="field" required value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label><div className="field-grid"><label>Disciplina<input className="field" value={form.category || ''} onChange={e=>setForm({...form,category:e.target.value})}/></label><label>Prazo<input className="field" type="date" required value={form.due_date} onChange={e=>setForm({...form,due_date:e.target.value})}/></label></div><label>Tipo de atividade<select className="field" value={form.pillar} onChange={e=>setForm({...form,pillar:e.target.value})}>{PILLAR_ORDER.map(p=><option key={p} value={p}>{pillarOf(p).label}</option>)}</select></label>
- <GoalResultsFields value={form} onChange={setForm} questions={!catalog.error && !catalog.loading}/>{!form.id && <button className="btn" type="button" onClick={()=>setSource('catalog')}>Preencher com meta do catálogo</button>}<h3>Blocos e orientações</h3><p className="muted small">Organize os assuntos e materiais que o aluno deve estudar.</p>{form.goal_blocks.map((b,i)=><div className="block-editor" key={b.id || i}><label>Nome do bloco<input className="field" required value={b.title} onChange={e=>updateBlock(i,'title',e.target.value)}/></label><label>Assunto e orientações<textarea className="field" rows="3" value={b.topic || ''} onChange={e=>updateBlock(i,'topic',e.target.value)}/></label><label>Material de apoio<input className="field" type="url" placeholder="https://" value={b.material_url || ''} onChange={e=>updateBlock(i,'material_url',e.target.value)}/></label>{!b.id && <button type="button" className="text-action" onClick={()=>setForm({...form,goal_blocks:form.goal_blocks.filter((_,j)=>i!==j)})}>Remover bloco não salvo</button>}</div>)}
- <button className="btn" type="button" onClick={()=>setForm({...form,goal_blocks:[...form.goal_blocks,{title:'',topic:'',material_url:''}]})}>＋ Adicionar bloco</button><div className="editor-footer"><button type="button" className="btn" onClick={()=>setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy?'Salvando...':'Salvar alterações'}</button></div></fieldset></form></section>}</div></>
+const fresh = (student, date) => ({ student_id: student, title: '', category: '', pillar: 'leitura', due_date: date, time_seconds: 0, questions_total: null, questions_correct: null, goal_blocks: [], isNew: true, addToCatalog: false, catalogTopic: '' })
+
+export default function MentorPanel() {
+  const { students, goals, loading, error, user, reload } = useWorkspace()
+  const catalog = useGoalCatalog()
+  const [params, setParams] = useSearchParams()
+  const student = params.get('aluno') || '', all = params.get('periodo') === 'todos'
+  const [offset, setOffset] = useState(0), [status, setStatus] = useState('')
+  const [form, setForm] = useState(null), [picker, setPicker] = useState(null)
+  const [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
+  const [selected, setSelected] = useState([]), [batchDate, setBatchDate] = useState('')
+  const [showPack, setShowPack] = useState(!!params.get('pacote')), [packId, setPackId] = useState(params.get('pacote') || '')
+  const editorRef = useRef(null)
+  const mine = students.filter(s => s.mentor_id === user.id)
+  const currentStudent = mine.find(s => s.id === student)
+  const studentName = currentStudent?.full_name || 'Aluno sem nome'
+  const week = weekDates(offset)
+  const filtered = goals.filter(g => g.student_id === currentStudent?.id && (all || (g.due_date >= week.from && g.due_date <= week.to)) && (!status || (status === 'done' ? g.completed : !g.completed)))
+  const calendarStarts = all ? [...new Set(filtered.map(g => dateKey(startOfWeek(new Date(g.due_date + 'T12:00:00'), { weekStartsOn: 1 }))))].sort().reverse() : [week.from]
+  const questionsReady = !catalog.error && !catalog.loading
+
+  // Only the manual creation/editing flow scrolls to the lower form.
+  useEffect(() => { if (form) editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [!!form])
+  useEffect(() => {
+    setSelected([]); setBatchDate(''); setForm(null); setPicker(null); setNotice('')
+  }, [student, all, offset, status])
+
+  function changeFilter(key, value) {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value); else next.delete(key)
+    setParams(next)
+  }
+  function openPicker(day) {
+    if (!currentStudent) return
+    setForm(null); setShowPack(false); setNotice('')
+    setPicker({ date: typeof day === 'string' ? day : all ? dateKey() : week.from })
+  }
+  function createGoal() {
+    setForm(fresh(student, picker.date)); setPicker(null); setNotice('')
+  }
+  function edit(goal) {
+    setPicker(null); setNotice('')
+    setForm({ ...goal, category: goal.category || '', originalSeconds: goal.time_seconds, goal_blocks: (goal.goal_blocks || []).map(b => ({ ...b })).sort((a, b) => a.position - b.position) })
+  }
+  function updateBlock(i, key, value) {
+    setForm(f => ({ ...f, goal_blocks: f.goal_blocks.map((b, j) => i === j ? { ...b, [key]: value } : b) }))
+  }
+  async function save(e) {
+    e.preventDefault(); if (busy || !currentStudent || form.student_id !== student) return
+    setBusy(true); setNotice('')
+    try {
+      await saveAssignedGoal(form, { questions: questionsReady, onProgress: setForm })
+      const added = form.addToCatalog
+      setForm(null); await reload()
+      if (added) await catalog.reload()
+      setNotice(added ? 'Meta salva para o aluno e incluída no catálogo.' : 'Meta salva com sucesso.')
+    } catch (e) {
+      if (e.draft) setForm(e.draft)
+      setNotice((e.draft?.id ? 'A meta já existe, mas o salvamento não terminou. Tente salvar novamente para concluir sem duplicar. ' : 'Não foi possível salvar. ') + e.message)
+    } finally { setBusy(false) }
+  }
+  async function importTemplate(template) {
+    if (busy || !currentStudent || !picker.date) return
+    setBusy(true)
+    const draft = picker.draft?.id ? picker.draft : { ...fresh(student, picker.date), title: template.title, category: template.category, pillar: template.pillar, goal_blocks: [...(template.topic ? [{ title: 'Assunto', topic: template.topic, material_url: '' }] : []), ...template.blocks.map(b => ({ title: b.title, topic: b.topic, material_url: b.material_url }))] }
+    try {
+      await saveAssignedGoal(draft, { questions: questionsReady, onProgress: saved => setPicker(p => ({ ...p, draft: saved })) })
+      setPicker(null); await reload(); setNotice('Meta importada para ' + studentName + '.')
+    } catch (e) {
+      setPicker(p => ({ ...p, draft: e.draft, error: e.message }))
+    } finally { setBusy(false) }
+  }
+  function selectGoals(ids) {
+    setSelected(ids)
+    setBatchDate(ids.length === 1 ? goals.find(g => g.id === ids[0])?.due_date || '' : '')
+  }
+  async function saveDates(e) {
+    e.preventDefault(); if (busy || !currentStudent || !selected.length) return
+    setBusy(true); setNotice('')
+    try {
+      const r = await supabase.from('goals').update({ due_date: batchDate }).eq('student_id', student).in('id', selected).select('id')
+      if (r.error) throw r.error
+      setSelected([]); setBatchDate(''); setForm(null); await reload()
+      setNotice(r.data.length + (r.data.length === 1 ? ' meta reagendada.' : ' metas reagendadas.'))
+    } catch (e) { setNotice('Não foi possível alterar a data. ' + e.message) }
+    finally { setBusy(false) }
+  }
+  async function importPack() {
+    if (busy || !currentStudent || !packId || all) return
+    setBusy(true); setNotice('')
+    try {
+      const r = await supabase.rpc('import_goal_week_pack', { p_pack: packId, p_student: student, p_week: week.from })
+      if (r.error) throw r.error
+      setShowPack(false); await reload(); setNotice(r.data + ' metas importadas.')
+    } catch (e) { setNotice(e.message) }
+    finally { setBusy(false) }
+  }
+
+  return <>
+    <PageTitle title="Metas semanais" subtitle="Escolha o aluno para organizar as metas da semana."/>
+    {(error || notice) && <p className={'notice ' + (error ? 'error' : '')} role="status">{error || notice}</p>}
+    <fieldset disabled={busy} className="toolbar">
+      <label className="inline-field">Aluno<select className="field" aria-label="Aluno" value={student} onChange={e => changeFilter('aluno', e.target.value)}><option value="">Selecione um aluno</option>{mine.map(s => <option key={s.id} value={s.id}>{s.full_name || 'Aluno sem nome'}</option>)}</select></label>
+      {currentStudent && <><WeekPicker offset={offset} onChange={n => { setOffset(n); changeFilter('periodo', '') }}/><label className="check-label"><input type="checkbox" checked={all} onChange={e => changeFilter('periodo', e.target.checked ? 'todos' : '')}/>Todo o histórico</label></>}
+    </fieldset>
+    {!currentStudent ? <p className="student-selection-hint">{loading ? 'Carregando alunos…' : student ? 'Selecione um aluno vinculado à sua mentoria.' : 'Selecione um aluno acima para visualizar e editar suas metas.'}</p> : <>
+      <div className="editing-student"><Avatar name={studentName}/><div><small>Editando metas de</small><strong>{studentName}</strong><span>{all ? 'Todo o histórico' : format(week.start, 'dd/MM/yyyy') + ' a ' + format(week.end, 'dd/MM/yyyy')}</span></div></div>
+      <div className={'goals-workspace ' + (form ? 'editing' : '')}>
+        <Card title={'Metas de ' + studentName} subtitle={filtered.length + ' metas no período'} action={<div className="toolbar-actions"><button className="btn primary" disabled={busy} onClick={openPicker}>＋ Adicionar meta</button><button className="btn" disabled={busy} onClick={() => setShowPack(!showPack)}>Importar pacote semanal</button></div>}>
+          <fieldset disabled={busy} className="week-selection-toolbar">
+            <label className="check-label"><input type="checkbox" disabled={!filtered.length} checked={!!filtered.length && filtered.every(g => selected.includes(g.id))} onChange={e => selectGoals(e.target.checked ? filtered.map(g => g.id) : [])}/>Selecionar todas</label>
+            <select className="field" aria-label="Filtrar status" value={status} onChange={e => setStatus(e.target.value)}><option value="">Todos os status</option><option value="done">Concluídas</option><option value="pending">Não concluídas</option></select>
+          </fieldset>
+          {selected.length > 0 && <form onSubmit={saveDates} className="selected-goal-dates"><strong>{selected.length} {selected.length === 1 ? 'meta selecionada' : 'metas selecionadas'}</strong><label>Nova data<input type="date" className="field" required disabled={busy} value={batchDate} onChange={e => setBatchDate(e.target.value)}/></label><button disabled={busy} className="btn primary">Aplicar data</button><button type="button" disabled={busy} className="text-action" onClick={() => selectGoals([])}>Limpar seleção</button></form>}
+          {showPack && <section className="inline-week-panel" aria-label="Importar pacote"><div className="card-heading"><h3>Importar pacote semanal</h3><button className="btn" disabled={busy} onClick={() => setShowPack(false)}>Fechar</button></div>
+            {catalog.error ? <p className="notice">{catalog.error}</p> : catalog.loading ? <p>Carregando pacotes…</p> : <>
+              <div className="toolbar"><select aria-label="Pacote semanal" className="field" value={packId} disabled={busy} onChange={e => setPackId(e.target.value)}><option value="">Escolha o pacote</option>{catalog.packs.map(p => <option key={p.id} value={p.id}>{p.name} · {p.items.length} metas</option>)}</select><Link className="text-action" to="/mentor/pacotes">Organizar pacotes</Link></div>
+              <p className="muted">{studentName} · Semana de {format(week.start, 'dd/MM/yyyy')}. As metas existentes serão mantidas.</p>
+              {packId && <div className="pack-preview">{['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map((d,i) => <div key={d}><strong>{d}</strong>{catalog.packs.find(p => p.id === packId)?.items.filter(it => it.weekday === i).map((it,j) => <p key={j}>{catalog.templates.find(t => t.id === it.template_id)?.title || 'Meta indisponível'}</p>)}</div>)}</div>}
+              <button className="btn primary" disabled={busy || !packId || all} onClick={importPack}>Importar pacote para esta semana</button>{all && <p>Desmarque “Todo o histórico” para escolher a semana.</p>}
+            </>}
+          </section>}
+          {loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} onEdit={edit} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
+          {picker && <WeekGoalPicker catalog={catalog} picker={picker} studentName={studentName} busy={busy} onDate={date => setPicker(p => ({ ...p, date, draft: null }))} onImport={importTemplate} onCreate={createGoal} onClose={() => setPicker(null)}/>}
+        </Card>
+        {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong></p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
+          <label>Título da meta<input className="field" required value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}/></label>
+          <div className="field-grid"><label>Disciplina<input className="field" required={form.addToCatalog} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}/></label><label>Prazo<input className="field" type="date" required value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })}/></label></div>
+          <label>Tipo de atividade<select className="field" value={form.pillar} onChange={e => setForm({ ...form, pillar: e.target.value })}>{PILLAR_ORDER.map(p => <option key={p} value={p}>{pillarOf(p).label}</option>)}</select></label>
+          {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!questionsReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda um modelo reutilizável, sem o tempo e os resultados deste aluno.</p>{form.addToCatalog && <label>Assunto no catálogo<input className="field" required value={form.catalogTopic} onChange={e => setForm({ ...form, catalogTopic: e.target.value })}/></label>}{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
+          <GoalResultsFields value={form} onChange={setForm} questions={questionsReady}/>
+          <h3>Blocos e orientações</h3><p className="muted small">Organize os assuntos e materiais que o aluno deve estudar.</p>
+          {form.goal_blocks.map((b,i) => <div className="block-editor" key={b.id || i}><label>Nome do bloco<input className="field" required value={b.title} onChange={e => updateBlock(i, 'title', e.target.value)}/></label><label>Assunto e orientações<textarea className="field" rows="3" value={b.topic || ''} onChange={e => updateBlock(i, 'topic', e.target.value)}/></label><label>Material de apoio<input className="field" type="url" placeholder="https://" value={b.material_url || ''} onChange={e => updateBlock(i, 'material_url', e.target.value)}/></label>{!b.id && <button type="button" className="text-action" onClick={() => setForm({ ...form, goal_blocks: form.goal_blocks.filter((_,j) => i !== j) })}>Remover bloco não salvo</button>}</div>)}
+          <button className="btn" type="button" onClick={() => setForm({ ...form, goal_blocks: [...form.goal_blocks, { title: '', topic: '', material_url: '' }] })}>＋ Adicionar bloco</button>
+          <div className="editor-footer"><button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
+        </fieldset></form></section>}
+      </div>
+    </>}
+  </>
 }
