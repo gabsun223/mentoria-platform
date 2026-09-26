@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { pillarOf } from '../lib/pillars'
+import { pillarOf, activityKey } from '../lib/pillars'
 
 export default function DayGoalMiniCard({ goal }) {
-  const pillar = pillarOf(goal.pillar)
+  const pillar = pillarOf(activityKey(goal))
 
   return (
     <Link

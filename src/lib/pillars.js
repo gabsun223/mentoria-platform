@@ -1,11 +1,11 @@
-// Metadados fixos dos quatro pilares (categoria de topo de uma meta).
+// Categorias de atividade. O campo pillar legado permanece compatível no banco.
 // Cor/ícone vêm daqui — nunca do texto livre da disciplina.
 
-export const PILLAR_ORDER = ['leitura', 'legislacao', 'jurisprudencia', 'questoes']
+export const PILLAR_ORDER = ['teoria', 'revisao', 'questoes', 'legislacao', 'jurisprudencia', 'outros']
 
 export const PILLARS = {
-  leitura: {
-    label: 'Leitura',
+  teoria: {
+    label: 'Teoria',
     glyph: '📖',
     text: 'text-pilar-leitura',
     bg: 'bg-pilar-leitura-bg',
@@ -39,5 +39,15 @@ export const PILLARS = {
 }
 
 export function pillarOf(key) {
-  return PILLARS[key] ?? PILLARS.leitura
+  return PILLARS[key === 'leitura' ? 'teoria' : key] ?? PILLARS.teoria
+}
+
+PILLARS.revisao = { ...PILLARS.teoria, label: 'Revisão', glyph: '↻' }
+PILLARS.outros = { ...PILLARS.teoria, label: 'Outros', glyph: '◇' }
+export function activityKey(record) {
+  const key = record.activity_type || record.pillar
+  return PILLAR_ORDER.includes(key) ? key : PILLAR_ORDER.includes(record.pillar) ? record.pillar : 'teoria'
+}
+export function storagePillar(key) {
+  return ['questoes', 'legislacao', 'jurisprudencia'].includes(key) ? key : 'leitura'
 }

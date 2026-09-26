@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { pillarOf } from '../lib/pillars'
+import { pillarOf, activityKey } from '../lib/pillars'
 
 export default function GoalItem({ goal, blockSummary, onQuickComplete, busy }) {
-  const pillar = pillarOf(goal.pillar)
+  const pillar = pillarOf(activityKey(goal))
   const total = blockSummary?.total ?? 0
   const completedBlocks = blockSummary?.completed ?? 0
   const hasBlocks = total > 0

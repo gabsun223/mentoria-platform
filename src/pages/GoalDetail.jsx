@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import StudyTimer from '../components/StudyTimer'
 import GoalResultsEditor from '../components/GoalResultsEditor'
-import { pillarOf } from '../lib/pillars'
+import { pillarOf, activityKey } from '../lib/pillars'
 
 export default function GoalDetail() {
   const { id } = useParams()
@@ -145,7 +145,7 @@ export default function GoalDetail() {
     )
   }
 
-  const pillar = pillarOf(goal.pillar)
+  const pillar = pillarOf(activityKey(goal))
   const hasBlocks = blocks.length > 0
   const allBlocksDone = hasBlocks && blocks.every((b) => b.completed)
   const canConclude = hasBlocks ? allBlocksDone : true
@@ -211,11 +211,13 @@ export default function GoalDetail() {
       <div className="mb-4">
         {notice && <p className="notice error" role="alert">{notice}</p>}
         {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer key={'timer-'+goal.id} totalSeconds={goal.time_seconds} onAddSeconds={handleAddSeconds} onBusyChange={setTimerBusy} />}
-        <GoalResultsEditor key={'results-'+goal.id} goal={goal} disabled={timerBusy} onSaved={g=>{goalRef.current=g;setGoal(g)}}/>
+        {!isMentor && <GoalResultsEditor key={'results-'+goal.id} goal={goal} disabled={timerBusy} onSaved={g=>{goalRef.current=g;setGoal(g)}}/>}
       </div>
 
-      <div className="mb-4">
-        <p className="font-mono text-[11px] text-ink-muted tracking-wide mb-2">BLOCOS DE ESTUDO</p>
+      {/^https?:\/\//i.test(goal.material_url || '') && <section className="surface mb-4"><div className="card-heading"><h2>Material da meta</h2></div><a className="btn" href={goal.material_url} target="_blank" rel="noopener noreferrer">Acessar material ↗</a></section>}
+
+      {hasBlocks && <div className="mb-4">
+        <p className="font-mono text-[11px] text-ink-muted tracking-wide mb-2">MATERIAIS E ORIENTAÇÕES ANTERIORES</p>
 
         {!hasBlocks ? (
           <p className="text-sm text-ink-muted border border-dashed border-paper-dark rounded-md p-4 text-center">
@@ -277,6 +279,7 @@ export default function GoalDetail() {
         )}
       </div>
 
+      }
       {!isMentor && <div className="border border-paper-dark rounded-md p-4">
         <p className="font-mono text-[11px] text-ink-muted tracking-wide mb-2">CONCLUIR META</p>
         <button

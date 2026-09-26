@@ -1,6 +1,7 @@
 import { addDays, format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Link } from 'react-router-dom'
+import { activityKey, pillarOf } from '../lib/pillars'
 import { dateKey, hours, Status } from './WorkspaceUI'
 
 export default function WeeklyGoalCalendar({ start, goals, onEdit, onAdd, studentName, selected, onSelect, disabled=false }) {
@@ -14,7 +15,7 @@ export default function WeeklyGoalCalendar({ start, goals, onEdit, onAdd, studen
           {studentName && <small>{studentName(g.student_id)}</small>}
           <span className="subject-tag">{g.category || 'Sem matéria'}</span>
           {onEdit?<button disabled={disabled} className="calendar-title" onClick={()=>onEdit(g)}>{g.title}</button>:<Link className="calendar-title" to={'/metas/'+g.id}>{g.title}</Link>}
-          <Status goal={g}/>
+          <small>{pillarOf(activityKey(g)).label}</small><Status goal={g}/>
           {(g.completed || g.time_seconds>0) && <p className="goal-metric">Tempo total: {hours(g.time_seconds || 0)}</p>}
           {g.questions_total>0 && <p className="goal-metric">{Math.round(g.questions_correct/g.questions_total*100)}% de acertos <small>({g.questions_correct}/{g.questions_total})</small></p>}
           {onEdit && <Link className="text-action" to={'/metas/'+g.id}>Ver estudo →</Link>}

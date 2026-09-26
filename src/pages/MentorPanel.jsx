@@ -3,15 +3,16 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { format, startOfWeek } from 'date-fns'
 import WeeklyGoalCalendar from '../components/WeeklyGoalCalendar'
 import WeekGoalPicker from '../components/WeekGoalPicker'
-import GoalResultsFields from '../components/GoalResultsFields'
+import GoalDefinitionFields from '../components/GoalDefinitionFields'
+import { definitionFrom } from '../lib/goalDefinition'
 import useGoalCatalog from '../lib/useGoalCatalog'
 import useWorkspace from '../lib/useWorkspace'
 import { saveAssignedGoal } from '../lib/saveAssignedGoal'
 import { supabase } from '../supabaseClient'
-import { PILLAR_ORDER, pillarOf } from '../lib/pillars'
+
 import { PageTitle, WeekPicker, weekDates, dateKey, Card, Empty, Icon, Avatar } from '../components/WorkspaceUI'
 
-const fresh = (student, date) => ({ student_id: student, title: '', category: '', pillar: 'leitura', due_date: date, time_seconds: 0, questions_total: null, questions_correct: null, goal_blocks: [], isNew: true, addToCatalog: false, catalogTopic: '' })
+const fresh = (student, date) => ({ student_id: student, due_date: date, category: '', topic: '', activity_type: 'teoria', material_url: '', isNew: true, addToCatalog: false })
 
 export default function MentorPanel() {
   const { students, goals, loading, error, user, reload } = useWorkspace()
@@ -30,7 +31,7 @@ export default function MentorPanel() {
   const week = weekDates(offset)
   const filtered = goals.filter(g => g.student_id === currentStudent?.id && (all || (g.due_date >= week.from && g.due_date <= week.to)) && (!status || (status === 'done' ? g.completed : !g.completed)))
   const calendarStarts = all ? [...new Set(filtered.map(g => dateKey(startOfWeek(new Date(g.due_date + 'T12:00:00'), { weekStartsOn: 1 }))))].sort().reverse() : [week.from]
-  const questionsReady = !catalog.error && !catalog.loading
+  const catalogReady = !catalog.error && !catalog.loading
 
   // Only the manual creation/editing flow scrolls to the lower form.
   useEffect(() => { if (form) editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [!!form])
@@ -53,16 +54,13 @@ export default function MentorPanel() {
   }
   function edit(goal) {
     setPicker(null); setNotice('')
-    setForm({ ...goal, category: goal.category || '', originalSeconds: goal.time_seconds, goal_blocks: (goal.goal_blocks || []).map(b => ({ ...b })).sort((a, b) => a.position - b.position) })
-  }
-  function updateBlock(i, key, value) {
-    setForm(f => ({ ...f, goal_blocks: f.goal_blocks.map((b, j) => i === j ? { ...b, [key]: value } : b) }))
+    setForm({ ...goal, ...definitionFrom(goal) })
   }
   async function save(e) {
     e.preventDefault(); if (busy || !currentStudent || form.student_id !== student) return
     setBusy(true); setNotice('')
     try {
-      await saveAssignedGoal(form, { questions: questionsReady, onProgress: setForm })
+      await saveAssignedGoal(form, { onProgress: setForm })
       const added = form.addToCatalog
       setForm(null); await reload()
       if (added) await catalog.reload()
@@ -75,9 +73,9 @@ export default function MentorPanel() {
   async function importTemplate(template) {
     if (busy || !currentStudent || !picker.date) return
     setBusy(true)
-    const draft = picker.draft?.id ? picker.draft : { ...fresh(student, picker.date), title: template.title, category: template.category, pillar: template.pillar, goal_blocks: [...(template.topic ? [{ title: 'Assunto', topic: template.topic, material_url: '' }] : []), ...template.blocks.map(b => ({ title: b.title, topic: b.topic, material_url: b.material_url }))] }
+    const draft = picker.draft?.id ? picker.draft : { ...fresh(student, picker.date), ...definitionFrom(template), importLegacyBlocks: true, goal_blocks: template.blocks.map(b => ({ title: b.title, topic: b.topic, material_url: b.material_url })) }
     try {
-      await saveAssignedGoal(draft, { questions: questionsReady, onProgress: saved => setPicker(p => ({ ...p, draft: saved })) })
+      await saveAssignedGoal(draft, { onProgress: saved => setPicker(p => ({ ...p, draft: saved })) })
       setPicker(null); await reload(); setNotice('Meta importada para ' + studentName + '.')
     } catch (e) {
       setPicker(p => ({ ...p, draft: e.draft, error: e.message }))
@@ -136,15 +134,9 @@ export default function MentorPanel() {
           {loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} onEdit={edit} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
           {picker && <WeekGoalPicker catalog={catalog} picker={picker} studentName={studentName} busy={busy} onDate={date => setPicker(p => ({ ...p, date, draft: null }))} onImport={importTemplate} onCreate={createGoal} onClose={() => setPicker(null)}/>}
         </Card>
-        {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong></p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
-          <label>Título da meta<input className="field" required value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}/></label>
-          <div className="field-grid"><label>Disciplina<input className="field" required={form.addToCatalog} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}/></label><label>Prazo<input className="field" type="date" required value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })}/></label></div>
-          <label>Tipo de atividade<select className="field" value={form.pillar} onChange={e => setForm({ ...form, pillar: e.target.value })}>{PILLAR_ORDER.map(p => <option key={p} value={p}>{pillarOf(p).label}</option>)}</select></label>
-          {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!questionsReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda um modelo reutilizável, sem o tempo e os resultados deste aluno.</p>{form.addToCatalog && <label>Assunto no catálogo<input className="field" required value={form.catalogTopic} onChange={e => setForm({ ...form, catalogTopic: e.target.value })}/></label>}{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
-          <GoalResultsFields value={form} onChange={setForm} questions={questionsReady}/>
-          <h3>Blocos e orientações</h3><p className="muted small">Organize os assuntos e materiais que o aluno deve estudar.</p>
-          {form.goal_blocks.map((b,i) => <div className="block-editor" key={b.id || i}><label>Nome do bloco<input className="field" required value={b.title} onChange={e => updateBlock(i, 'title', e.target.value)}/></label><label>Assunto e orientações<textarea className="field" rows="3" value={b.topic || ''} onChange={e => updateBlock(i, 'topic', e.target.value)}/></label><label>Material de apoio<input className="field" type="url" placeholder="https://" value={b.material_url || ''} onChange={e => updateBlock(i, 'material_url', e.target.value)}/></label>{!b.id && <button type="button" className="text-action" onClick={() => setForm({ ...form, goal_blocks: form.goal_blocks.filter((_,j) => i !== j) })}>Remover bloco não salvo</button>}</div>)}
-          <button className="btn" type="button" onClick={() => setForm({ ...form, goal_blocks: [...form.goal_blocks, { title: '', topic: '', material_url: '' }] })}>＋ Adicionar bloco</button>
+        {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong> · Dia {format(new Date(form.due_date + 'T12:00:00'), 'dd/MM/yyyy')}</p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
+          <GoalDefinitionFields value={form} onChange={setForm} subjects={[...new Set(catalog.templates.map(t => t.category))]}/>
+          {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!catalogReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda esta matéria, assunto, categoria e link para reutilizar em outras metas.</p>{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
           <div className="editor-footer"><button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
         </fieldset></form></section>}
       </div>

@@ -16,6 +16,8 @@ await db.exec(await sql('migrations/0004_mentor_sees_unclaimed_students.sql'))
 await db.exec(await sql('migrations/0006_goal_catalog.sql'))
 // The migration can safely be applied a second time.
 await db.exec(await sql('migrations/0006_goal_catalog.sql'))
+await db.exec(await sql('migrations/0007_simple_goal_fields.sql'))
+await db.exec(await sql('migrations/0007_simple_goal_fields.sql'))
 const mentor='10000000-0000-4000-8000-000000000001',student='10000000-0000-4000-8000-000000000002',other='10000000-0000-4000-8000-000000000003'
 await db.exec(`insert into auth.users values('${mentor}'),('${student}'),('${other}');
 insert into profiles(id,role) values('${mentor}','mentor'),('${other}','mentor');
@@ -30,15 +32,26 @@ assert.equal(await scalar(`select import_goal_week_pack($1,$2,'2026-09-28')`,[pa
 const goals=(await db.query('select * from goals order by due_date')).rows
 assert.equal(goals.length,2);assert.equal(goals[0].due_date.toISOString().slice(0,10),'2026-09-28');assert.equal(goals[1].due_date.toISOString().slice(0,10),'2026-10-04')
 assert.equal(goals[0].time_seconds,0);assert.equal(goals[0].completed,false)
-assert.equal(await scalar('select count(*)::integer from goal_blocks'),4)
+assert.equal(await scalar('select count(*)::integer from goal_blocks'),2)
+assert.equal(goals[0].topic,'Direitos fundamentais')
+assert.equal(goals[0].activity_type,'teoria')
+assert.equal(goals[0].material_url,'https://example.com')
 await assert.rejects(()=>db.query(`select import_goal_week_pack($1,$2,'2026-09-28')`,[pack,student]),/já foi importado/)
 assert.equal(await scalar('select count(*)::integer from goals'),2)
 await db.query(`update goal_templates set title='Novo título' where id=$1`,[template])
-assert.equal(await scalar('select title from goals limit 1'),'Leitura')
+assert.equal(await scalar('select title from goals limit 1'),'Direitos fundamentais')
 const invalid=await scalar(`insert into goal_week_packs(name,items) values('Inválido',$1) returning id`,[JSON.stringify([{template_id:template,weekday:1},{template_id:other,weekday:2}])])
 await assert.rejects(()=>db.query(`select import_goal_week_pack($1,$2,'2026-10-05')`,[invalid,student]),/não está disponível/)
 assert.equal(await scalar('select count(*)::integer from goals'),2)
 assert.equal(await scalar('select count(*)::integer from goal_pack_imports'),1)
+for(const activity of ['teoria','revisao','questoes','legislacao','jurisprudencia','outros']) {
+  await db.query(`update goal_templates set activity_type=$1, material_url='https://example.com/new',blocks='[]' where id=$2`,[activity,template])
+  const one=await scalar(`insert into goal_week_packs(name,items) values($1,$2) returning id`,[activity,JSON.stringify([{template_id:template,weekday:0}])])
+  await db.query(`select import_goal_week_pack($1,$2,'2026-11-02')`,[one,student])
+  const result=(await db.query(`select * from goals where activity_type=$1 and due_date='2026-11-02'`,[activity])).rows[0]
+  assert.ok(result);assert.equal(result.material_url,'https://example.com/new')
+  assert.equal(await scalar('select count(*)::integer from goal_blocks where goal_id=$1',[result.id]),0)
+}
 await assert.rejects(()=>db.query(`select import_goal_week_pack($1,$2,'2026-09-29')`,[pack,student]),/segunda-feira/)
 await assert.rejects(()=>db.query(`update goals set questions_total=5,questions_correct=6 where id=$1`,[goals[0].id]),/goal_question_results_valid/)
 await login(other)
