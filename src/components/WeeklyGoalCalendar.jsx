@@ -1,3 +1,4 @@
+import { goalOrder } from '../lib/studyStats'
 import { addDays, format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Link } from 'react-router-dom'
@@ -7,7 +8,7 @@ import { dateKey, hours, Status, goalStatus, Priority } from './WorkspaceUI'
 export default function WeeklyGoalCalendar({ start, goals, onEdit, onAdd, studentName, selected, onSelect, disabled=false, onDay, dayOnly }) {
   return <div className={'weekly-scroll '+(dayOnly?'single-day':'')} tabIndex={0} aria-label={dayOnly?'Metas do dia':'Calendário semanal, deslize para ver todos os dias'}><div className="weekly-calendar">
     {(dayOnly?[new Date(dayOnly+'T12:00:00')]:Array.from({length:7},(_,i)=>addDays(start,i))).map(day=>{
-      const key=dateKey(day), rows=goals.filter(g=>g.due_date===key)
+      const key=dateKey(day), rows=goals.filter(g=>g.due_date===key).sort(goalOrder)
       return <section className={'calendar-day '+(key===dateKey()?'is-today':'')} key={key}>
         <header>{onDay && !dayOnly ? <button className="day-open" disabled={disabled} onClick={()=>onDay(key)} aria-label={'Abrir dia '+format(day,'dd/MM/yyyy')}><strong>{format(day,'EEEE',{locale:ptBR})}</strong><span>{format(day,'dd/MM')}</span></button> : <><strong>{format(day,'EEEE',{locale:ptBR})}</strong><span>{format(day,'dd/MM')}</span></>}<small>{rows.length} metas</small></header>
         {rows.map(g=><article key={g.id} className={'calendar-goal '+({'Concluída':'done','Atrasada':'late','Em andamento':'progress'}[goalStatus(g)] || '')}>

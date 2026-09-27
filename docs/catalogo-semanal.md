@@ -43,3 +43,14 @@ A atualização 0009_goal_planning.sql acrescenta prioridade, quantidade previst
 Status: concluída tem precedência; cronômetro ativo ou tempo acumulado indica em andamento; sem estudo e com prazo vencido indica atrasada; os demais ficam pendentes. Cada meta mantém seu próprio cronômetro ao navegar. Pausar grava o intervalo com bloqueio da linha; repetir iniciar/pausar não duplica tempo. Concluir encerra a contagem.
 Anexos: PDF, PNG/JPEG, TXT e DOCX, até 20 MB. O bucket é privado; professor e aluno com a meta atribuída podem baixar. Remover um anexo desvincula apenas daquela definição, preservando cópias já atribuídas. Uploads são feitos antes de salvar a definição; cancelar pode deixar arquivo privado sem vínculo, sem publicação para alunos.
 Verificações focadas: tests/planning-database.mjs (importação, acesso aos anexos e cronômetros independentes) e tests/planning-browser.cjs (dia, editor lateral, campos, upload e navegação entre cronômetros).
+
+Atualização 0010 — edital e desempenho:
+- Edital privado por professor, com leitura dos alunos vinculados. Assuntos existentes nas metas/modelos foram aproveitados e vinculados por ID. Novas definições usam as listas do edital.
+- Links opcionais separados para legislação e questões; a biblioteca apresenta somente uploads, agrupados por matéria. Links antigos não classificados continuam disponíveis no detalhe da meta.
+- Metas ordenadas por data e ordem diária, compartilhada entre calendário, lista de foco e navegação anterior/próxima.
+- Professor: situação dos alunos em uma única seção, com atraso somente desde a segunda-feira da semana passada. Alunos ficam acessíveis pelo link do quadro. Catálogo/pacotes por botões em Metas semanais; sem menu de relatórios.
+- Aluno: horas por semana, distribuição diária por matéria, horas/acertos por matéria, últimos cumprimentos e histórico por assunto. Taxa geral usa questões de metas e provas, sem somar os mesmos dados do histórico novamente.
+- Cronômetro pausado cria registros datados, divididos na meia-noite de America/Manaus. Ajustes de tempo reduzem os registros mais recentes ou acrescentam na data informada. Resultados de questões da meta são totais acumulados, realocados para a data de seu último ajuste.
+- Conclusão por janela sobreposta, com dados da meta preenchidos e vinculados ao edital; grava data de estudo, tempo total, resultados, material e comentários. Repetir o envio não duplica a conclusão. A reabertura mantém o histórico anterior.
+- Tempo e resultados antigos sem data confiável são mantidos com data desconhecida; entram nos totais, não nos gráficos temporais, até um registro explícito identificar a data. Conclusões anteriores sem timestamp não têm uma ordem histórica inventada.
+Validação focada: study-records-database.mjs e study-records-browser.cjs; build de produção. Migração aplicada no Supabase.

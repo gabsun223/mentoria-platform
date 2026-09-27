@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import StudyTimer from '../components/StudyTimer'
 import GoalAttachments from '../components/GoalAttachments'
 import { Status, Priority } from '../components/WorkspaceUI'
-import GoalResultsEditor from '../components/GoalResultsEditor'
+import StudyCompletionModal from '../components/StudyCompletionModal'
 import { pillarOf, activityKey } from '../lib/pillars'
 
 export default function GoalDetail() {
@@ -24,6 +24,7 @@ export default function GoalDetail() {
   const [copiedBlockId, setCopiedBlockId] = useState(null)
   const [timerBusy, setTimerBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [recording, setRecording] = useState(null)
 
   // Ref sincronizado com `goal` — o StudyTimer pode chamar onAddSeconds a partir
   // de uma closure "velha" (ex: commit no unmount, com o mount original). Ler
@@ -54,9 +55,10 @@ export default function GoalDetail() {
 
     const { data: allGoals } = await supabase
       .from('goals')
-      .select('id, due_date, created_at')
+      .select('id, due_date, created_at, day_order')
       .eq('student_id', goalData.student_id)
       .order('due_date', { ascending: true })
+      .order('day_order', { ascending: true })
       .order('created_at', { ascending: true })
 
     if (allGoals) {
@@ -79,7 +81,7 @@ export default function GoalDetail() {
   const handleTimerChange = async running => {
     const { data, error } = await supabase.rpc('set_goal_timer', { p_goal: goal.id, p_running: running })
     if (error) throw error
-    goalRef.current = data; setGoal(data)
+    goalRef.current = data; setGoal(data); return data
   }
   const toggleBlock = async (block) => {
     setSavingBlockId(block.id)
@@ -107,8 +109,14 @@ export default function GoalDetail() {
     }
   }
 
+  async function openRecord(complete) {
+    setConcluding(true); setNotice('')
+    try { const current = goal.timer_started_at ? await handleTimerChange(false) : goal; setRecording({goal:current,complete}) }
+    catch(e){setNotice(e.message)}finally{setConcluding(false)}
+  }
   const toggleGoalCompleted = async () => {
     if (!goal) return
+    if (!goal.completed) { await openRecord(true); return }
     setConcluding(true)
     const nextCompleted = !goal.completed
     if (nextCompleted && goal.timer_started_at) {
@@ -202,10 +210,15 @@ export default function GoalDetail() {
       <div className="mb-4">
         {notice && <p className="notice error" role="alert">{notice}</p>}
         {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer key={'timer-'+goal.id} goal={goal} onTimerChange={handleTimerChange} onBusyChange={setTimerBusy} />}
-        {!isMentor && <GoalResultsEditor key={'results-'+goal.id} goal={goal} disabled={timerBusy || !!goal.timer_started_at} onSaved={g=>{goalRef.current=g;setGoal(g)}}/>}
+        {!isMentor && <button className="btn" disabled={concluding} onClick={()=>openRecord(false)}>Registrar ou ajustar estudo</button>}
       </div>
 
-      {/^https?:\/\//i.test(goal.material_url || '') && <section className="surface mb-4"><div className="card-heading"><h2>Material da meta</h2></div><a className="btn" href={goal.material_url} target="_blank" rel="noopener noreferrer">Acessar material ↗</a></section>}
+      {recording && <StudyCompletionModal goal={recording.goal} complete={recording.complete} onClose={()=>setRecording(null)} onSaved={g=>{goalRef.current=g;setGoal(g);setNotice('Estudo registrado com sucesso.')}}/>}
+      <div className="toolbar">
+        {/^https?:\/\//i.test(goal.legislation_url || '') && <a className="btn" href={goal.legislation_url} target="_blank" rel="noopener noreferrer">Abrir legislação ↗</a>}
+        {/^https?:\/\//i.test(goal.questions_url || '') && <a className="btn" href={goal.questions_url} target="_blank" rel="noopener noreferrer">Abrir questões ↗</a>}
+        {/^https?:\/\//i.test(goal.material_url || '') && goal.material_url!==goal.legislation_url && goal.material_url!==goal.questions_url && <a className="btn" href={goal.material_url} target="_blank" rel="noopener noreferrer">Material anterior ↗</a>}
+      </div>
 
       {hasBlocks && <div className="mb-4">
         <p className="font-mono text-[11px] text-ink-muted tracking-wide mb-2">MATERIAIS E ORIENTAÇÕES ANTERIORES</p>

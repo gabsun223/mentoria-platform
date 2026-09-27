@@ -7,7 +7,8 @@ import Signup from './pages/Signup'
 import Dashboard from './pages/Dashboard'
 import WeekView from './pages/WeekView'
 import GoalDetail from './pages/GoalDetail'
-import ExamHistory from './pages/ExamHistory'
+import Performance from './pages/Performance'
+import Syllabus from './pages/Syllabus'
 import Profile from './pages/Profile'
 import MentorPanel from './pages/MentorPanel'
 import MentorOverview from './pages/MentorOverview'
@@ -74,7 +75,7 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Layout>
-              <StudentPage><ExamHistory /></StudentPage>
+              <StudentPage><Performance /></StudentPage>
             </Layout>
           </ProtectedRoute>
         }
@@ -103,7 +104,8 @@ export default function App() {
       <Route path="/mentor/pacotes" element={<ProtectedRoute requireRole="mentor"><Layout><WeekPacks /></Layout></ProtectedRoute>} />
       <Route path="/mentor/alunos" element={<ProtectedRoute requireRole="mentor"><Layout><Students /></Layout></ProtectedRoute>} />
       <Route path="/mentor/metas" element={<ProtectedRoute requireRole="mentor"><Layout><MentorPanel /></Layout></ProtectedRoute>} />
-      <Route path="/mentor/relatorios" element={<ProtectedRoute requireRole="mentor"><Layout><MentorOverview reports /></Layout></ProtectedRoute>} />
+      <Route path="/mentor/relatorios" element={<Navigate to="/mentor" replace/>} />
+      <Route path="/edital" element={<ProtectedRoute><Layout><Syllabus/></Layout></ProtectedRoute>} />
       <Route path="/encontros" element={<ProtectedRoute><Layout><Resources type="meetings" /></Layout></ProtectedRoute>} />
       <Route path="/materiais" element={<ProtectedRoute><Layout><StudentPage><Resources type="materials" /></StudentPage></Layout></ProtectedRoute>} />
       <Route path="/estudos" element={<ProtectedRoute><Layout><StudentPage><Resources type="study" /></StudentPage></Layout></ProtectedRoute>} />

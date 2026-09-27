@@ -5,6 +5,7 @@ import WeeklyGoalCalendar from '../components/WeeklyGoalCalendar'
 import WeekGoalPicker from '../components/WeekGoalPicker'
 import GoalDefinitionFields from '../components/GoalDefinitionFields'
 import { definitionFrom } from '../lib/goalDefinition'
+import useSyllabus from '../lib/useSyllabus'
 import useGoalCatalog from '../lib/useGoalCatalog'
 import useWorkspace from '../lib/useWorkspace'
 import { saveAssignedGoal } from '../lib/saveAssignedGoal'
@@ -17,6 +18,7 @@ const fresh = (student, date) => ({ student_id: student, due_date: date, categor
 export default function MentorPanel() {
   const { students, goals, loading, error, user, reload } = useWorkspace()
   const catalog = useGoalCatalog()
+  const syllabus = useSyllabus()
   const [params, setParams] = useSearchParams()
   const student = params.get('aluno') || '', all = params.get('periodo') === 'todos'
   const [day, setDay] = useState('')
@@ -52,7 +54,7 @@ export default function MentorPanel() {
     setPicker({ date: typeof day === 'string' ? day : focusedDay || (all ? dateKey() : week.from) })
   }
   function createGoal() {
-    setForm(fresh(student, picker.date)); setPicker(null); setNotice('')
+    const topic = syllabus.topics.find(t => t.id === params.get('assunto')); setForm({ ...fresh(student, picker.date), ...(topic ? {syllabus_topic_id:topic.id,category:topic.subject,topic:topic.topic} : {}) }); setPicker(null); setNotice('')
   }
   function edit(goal) {
     setDay(goal.due_date); setSelected([])
@@ -111,7 +113,7 @@ export default function MentorPanel() {
   }
 
   return <>
-    <PageTitle title="Metas semanais" subtitle="Escolha o aluno para organizar as metas da semana."/>
+    <PageTitle title="Metas semanais" subtitle="Escolha o aluno para organizar as metas da semana."><div className="toolbar-actions"><Link className="btn" to="/mentor/catalogo">Catálogo de metas</Link><Link className="btn" to="/mentor/pacotes">Pacotes semanais</Link><Link className="btn" to="/edital">Edital</Link></div></PageTitle>
     {(error || notice) && <p className={'notice ' + (error ? 'error' : '')} role="status">{error || notice}</p>}
     <fieldset disabled={busy} className="toolbar">
       <label className="inline-field">Aluno<select className="field" aria-label="Aluno" value={student} onChange={e => changeFilter('aluno', e.target.value)}><option value="">Selecione um aluno</option>{mine.map(s => <option key={s.id} value={s.id}>{s.full_name || 'Aluno sem nome'}</option>)}</select></label>
