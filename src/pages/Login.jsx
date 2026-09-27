@@ -24,8 +24,8 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper px-4">
-      <div className="w-full max-w-sm">
+    <div className="auth-page min-h-screen flex items-center justify-center bg-paper px-4">
+      <div className="w-full max-w-sm"><Link className="auth-home mb-8" to="/">← Conheça a mentoria</Link>
         <div className="text-center mb-8">
           <p className="font-serif text-2xl font-semibold text-ink">Mentoria Procuradorias</p>
           <p className="font-mono text-[11px] text-ink-muted mt-1 tracking-wide">

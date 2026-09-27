@@ -4,6 +4,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Sidebar from './components/Sidebar'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
+
+import LandingEditorial from './pages/LandingEditorial'
 import Dashboard from './pages/Dashboard'
 import WeekView from './pages/WeekView'
 import GoalDetail from './pages/GoalDetail'
@@ -35,15 +37,18 @@ function StudentPage({ children }) {
 }
 
 export default function App() {
+  const { session, loading } = useAuth()
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/cadastro" element={<Signup />} />
+      <Route path="/apresentacao" element={<LandingEditorial />} />
+      <Route path="/apresentacao-v2" element={<LandingEditorial />} />
 
       <Route
         path="/"
         element={
-          <ProtectedRoute>
+          !session && !loading ? <LandingEditorial /> : <ProtectedRoute>
             <Layout>
               <StudentPage><Dashboard /></StudentPage>
             </Layout>
