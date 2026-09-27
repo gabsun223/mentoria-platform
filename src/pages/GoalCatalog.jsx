@@ -28,7 +28,7 @@ export default function GoalCatalog() {
     {(error || notice) && <p className="notice" role="status">{error || notice}</p>}
     <input className="field catalog-search" aria-label="Buscar no catálogo" placeholder="Buscar matéria ou assunto…" value={search} onChange={e => setSearch(e.target.value)}/>
     {form && <Card title={form.id ? 'Editar meta padrão' : 'Nova meta padrão'}><form onSubmit={save}><fieldset className="editor-fields" disabled={busy}>
-      <GoalDefinitionFields value={form} onChange={setForm} subjects={Object.keys(groups)}/>
+      <GoalDefinitionFields value={form} onChange={setForm} subjects={Object.keys(groups)} onBusyChange={setBusy}/>
       <div className="editor-footer"><button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary">Salvar no catálogo</button></div>
     </fieldset></form></Card>}
     {loading ? <Empty>Carregando catálogo…</Empty> : <div className="catalog-grid">{Object.entries(groups).map(([category, rows]) => {

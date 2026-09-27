@@ -10,7 +10,7 @@ import useWorkspace from '../lib/useWorkspace'
 import { saveAssignedGoal } from '../lib/saveAssignedGoal'
 import { supabase } from '../supabaseClient'
 
-import { PageTitle, WeekPicker, weekDates, dateKey, Card, Empty, Icon, Avatar } from '../components/WorkspaceUI'
+import { PageTitle, WeekPicker, weekDates, dateKey, Card, Empty, Icon, Avatar, goalStatus } from '../components/WorkspaceUI'
 
 const fresh = (student, date) => ({ student_id: student, due_date: date, category: '', topic: '', activity_type: 'teoria', material_url: '', isNew: true, addToCatalog: false })
 
@@ -19,6 +19,7 @@ export default function MentorPanel() {
   const catalog = useGoalCatalog()
   const [params, setParams] = useSearchParams()
   const student = params.get('aluno') || '', all = params.get('periodo') === 'todos'
+  const [day, setDay] = useState('')
   const [offset, setOffset] = useState(0), [status, setStatus] = useState('')
   const [form, setForm] = useState(null), [picker, setPicker] = useState(null)
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
@@ -29,14 +30,14 @@ export default function MentorPanel() {
   const currentStudent = mine.find(s => s.id === student)
   const studentName = currentStudent?.full_name || 'Aluno sem nome'
   const week = weekDates(offset)
-  const filtered = goals.filter(g => g.student_id === currentStudent?.id && (all || (g.due_date >= week.from && g.due_date <= week.to)) && (!status || (status === 'done' ? g.completed : !g.completed)))
-  const calendarStarts = all ? [...new Set(filtered.map(g => dateKey(startOfWeek(new Date(g.due_date + 'T12:00:00'), { weekStartsOn: 1 }))))].sort().reverse() : [week.from]
+  const filtered = goals.filter(g => g.student_id === currentStudent?.id && (all || (g.due_date >= week.from && g.due_date <= week.to)) && (!day || g.due_date === day) && (!status || goalStatus(g) === status))
+  const calendarStarts = day ? [dateKey(startOfWeek(new Date(day + 'T12:00:00'), { weekStartsOn: 1 }))] : all ? [...new Set(filtered.map(g => dateKey(startOfWeek(new Date(g.due_date + 'T12:00:00'), { weekStartsOn: 1 }))))].sort().reverse() : [week.from]
   const catalogReady = !catalog.error && !catalog.loading
 
   // Only the manual creation/editing flow scrolls to the lower form.
-  useEffect(() => { if (form) editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [!!form])
+  useEffect(() => { if (form && !day) editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [!!form])
   useEffect(() => {
-    setSelected([]); setBatchDate(''); setForm(null); setPicker(null); setNotice('')
+    setDay(''); setSelected([]); setBatchDate(''); setForm(null); setPicker(null); setNotice('')
   }, [student, all, offset, status])
 
   function changeFilter(key, value) {
@@ -44,15 +45,17 @@ export default function MentorPanel() {
     if (value) next.set(key, value); else next.delete(key)
     setParams(next)
   }
+  const focusedDay = day
   function openPicker(day) {
     if (!currentStudent) return
     setForm(null); setShowPack(false); setNotice('')
-    setPicker({ date: typeof day === 'string' ? day : all ? dateKey() : week.from })
+    setPicker({ date: typeof day === 'string' ? day : focusedDay || (all ? dateKey() : week.from) })
   }
   function createGoal() {
     setForm(fresh(student, picker.date)); setPicker(null); setNotice('')
   }
   function edit(goal) {
+    setDay(goal.due_date); setSelected([])
     setPicker(null); setNotice('')
     setForm({ ...goal, ...definitionFrom(goal) })
   }
@@ -116,11 +119,11 @@ export default function MentorPanel() {
     </fieldset>
     {!currentStudent ? <p className="student-selection-hint">{loading ? 'Carregando alunos…' : student ? 'Selecione um aluno vinculado à sua mentoria.' : 'Selecione um aluno acima para visualizar e editar suas metas.'}</p> : <>
       <div className="editing-student"><Avatar name={studentName}/><div><small>Editando metas de</small><strong>{studentName}</strong><span>{all ? 'Todo o histórico' : format(week.start, 'dd/MM/yyyy') + ' a ' + format(week.end, 'dd/MM/yyyy')}</span></div></div>
-      <div className={'goals-workspace ' + (form ? 'editing' : '')}>
+      <div className={'goals-workspace ' + (day && form ? 'editing day-editing' : '')}>
         <Card title={'Metas de ' + studentName} subtitle={filtered.length + ' metas no período'} action={<div className="toolbar-actions"><button className="btn primary" disabled={busy} onClick={openPicker}>＋ Adicionar meta</button><button className="btn" disabled={busy} onClick={() => setShowPack(!showPack)}>Importar pacote semanal</button></div>}>
           <fieldset disabled={busy} className="week-selection-toolbar">
             <label className="check-label"><input type="checkbox" disabled={!filtered.length} checked={!!filtered.length && filtered.every(g => selected.includes(g.id))} onChange={e => selectGoals(e.target.checked ? filtered.map(g => g.id) : [])}/>Selecionar todas</label>
-            <select className="field" aria-label="Filtrar status" value={status} onChange={e => setStatus(e.target.value)}><option value="">Todos os status</option><option value="done">Concluídas</option><option value="pending">Não concluídas</option></select>
+            <select className="field" aria-label="Filtrar status" value={status} onChange={e => setStatus(e.target.value)}><option value="">Todos os status</option><option value="Pendente">Pendentes</option><option value="Atrasada">Atrasadas</option><option value="Em andamento">Em andamento</option><option value="Concluída">Concluídas</option></select>
           </fieldset>
           {selected.length > 0 && <form onSubmit={saveDates} className="selected-goal-dates"><strong>{selected.length} {selected.length === 1 ? 'meta selecionada' : 'metas selecionadas'}</strong><label>Nova data<input type="date" className="field" required disabled={busy} value={batchDate} onChange={e => setBatchDate(e.target.value)}/></label><button disabled={busy} className="btn primary">Aplicar data</button><button type="button" disabled={busy} className="text-action" onClick={() => selectGoals([])}>Limpar seleção</button></form>}
           {showPack && <section className="inline-week-panel" aria-label="Importar pacote"><div className="card-heading"><h3>Importar pacote semanal</h3><button className="btn" disabled={busy} onClick={() => setShowPack(false)}>Fechar</button></div>
@@ -131,11 +134,11 @@ export default function MentorPanel() {
               <button className="btn primary" disabled={busy || !packId || all} onClick={importPack}>Importar pacote para esta semana</button>{all && <p>Desmarque “Todo o histórico” para escolher a semana.</p>}
             </>}
           </section>}
-          {loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} onEdit={edit} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
+          {day && <button className="btn" disabled={busy} onClick={() => { setDay(''); setForm(null); setSelected([]); setPicker(null) }}>← Voltar à semana</button>}{loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} dayOnly={day} onDay={date => { setDay(date); setForm(null); setPicker(null); setSelected([]) }} onEdit={edit} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
           {picker && <WeekGoalPicker catalog={catalog} picker={picker} studentName={studentName} busy={busy} onDate={date => setPicker(p => ({ ...p, date, draft: null }))} onImport={importTemplate} onCreate={createGoal} onClose={() => setPicker(null)}/>}
         </Card>
         {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong> · Dia {format(new Date(form.due_date + 'T12:00:00'), 'dd/MM/yyyy')}</p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
-          <GoalDefinitionFields value={form} onChange={setForm} subjects={[...new Set(catalog.templates.map(t => t.category))]}/>
+          <GoalDefinitionFields value={form} onChange={setForm} onBusyChange={setBusy} subjects={[...new Set(catalog.templates.map(t => t.category))]}/>
           {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!catalogReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda esta matéria, assunto, categoria e link para reutilizar em outras metas.</p>{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
           <div className="editor-footer"><button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
         </fieldset></form></section>}

@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import StudyTimer from '../components/StudyTimer'
+import GoalAttachments from '../components/GoalAttachments'
+import { Status, Priority } from '../components/WorkspaceUI'
 import GoalResultsEditor from '../components/GoalResultsEditor'
 import { pillarOf, activityKey } from '../lib/pillars'
 
@@ -74,23 +76,11 @@ export default function GoalDetail() {
     load()
   }, [load])
 
-  const handleAddSeconds = async (delta) => {
-    const current = goal
-    if (!current) return
-    // Compare-and-swap preserves time added concurrently in another tab.
-    for (let attempt=0; attempt<3; attempt++) {
-      const read=await supabase.from('goals').select('time_seconds').eq('id',current.id).single()
-      if(read.error) throw read.error
-      const result=await supabase.from('goals').update({time_seconds:read.data.time_seconds+delta}).eq('id',current.id).eq('time_seconds',read.data.time_seconds).select().maybeSingle()
-      if(result.error) throw result.error
-      if(result.data){
-        if(goalRef.current?.id===current.id){goalRef.current={...goalRef.current,time_seconds:result.data.time_seconds};setGoal(goalRef.current)}
-        return
-      }
-    }
-    throw Error('O tempo mudou em outra tela. Tente salvar novamente.')
+  const handleTimerChange = async running => {
+    const { data, error } = await supabase.rpc('set_goal_timer', { p_goal: goal.id, p_running: running })
+    if (error) throw error
+    goalRef.current = data; setGoal(data)
   }
-
   const toggleBlock = async (block) => {
     setSavingBlockId(block.id)
     const nextCompleted = !block.completed
@@ -121,6 +111,9 @@ export default function GoalDetail() {
     if (!goal) return
     setConcluding(true)
     const nextCompleted = !goal.completed
+    if (nextCompleted && goal.timer_started_at) {
+      try { await handleTimerChange(false) } catch (e) { setNotice(e.message); setConcluding(false); return }
+    }
     const { error } = await supabase
       .from('goals')
       .update({ completed: nextCompleted })
@@ -181,13 +174,7 @@ export default function GoalDetail() {
 
       <div className="border border-paper-dark rounded-md bg-white/60 p-4 mb-4">
         <div className="flex items-center gap-2 flex-wrap mb-2">
-          <span
-            className={`text-[11px] px-2 py-0.5 rounded font-medium ${
-              goal.completed ? 'bg-selo-verde-bg text-selo-verde' : 'bg-paper-dark text-ink-muted'
-            }`}
-          >
-            {goal.completed ? 'Concluído' : 'Pendente'}
-          </span>
+          <Status goal={goal}/><Priority value={goal.priority}/>
           <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${pillar.bg} ${pillar.text}`}>
             {pillar.glyph} {pillar.label}
           </span>
@@ -208,12 +195,14 @@ export default function GoalDetail() {
         </p>
       </div>
 
+      {goal.questions_target > 0 && <p className="notice">Questões: {goal.questions_total || 0} de {goal.questions_target} previstas</p>}
+      {goal.attachments?.length > 0 && <section className="surface mb-4"><GoalAttachments files={goal.attachments}/></section>}
       {goal.teacher_notes && <section className="surface mb-4"><div className="card-heading"><h2>Observações do professor</h2></div><p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{goal.teacher_notes}</p></section>}
 
       <div className="mb-4">
         {notice && <p className="notice error" role="alert">{notice}</p>}
-        {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer key={'timer-'+goal.id} totalSeconds={goal.time_seconds} onAddSeconds={handleAddSeconds} onBusyChange={setTimerBusy} />}
-        {!isMentor && <GoalResultsEditor key={'results-'+goal.id} goal={goal} disabled={timerBusy} onSaved={g=>{goalRef.current=g;setGoal(g)}}/>}
+        {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer key={'timer-'+goal.id} goal={goal} onTimerChange={handleTimerChange} onBusyChange={setTimerBusy} />}
+        {!isMentor && <GoalResultsEditor key={'results-'+goal.id} goal={goal} disabled={timerBusy || !!goal.timer_started_at} onSaved={g=>{goalRef.current=g;setGoal(g)}}/>}
       </div>
 
       {/^https?:\/\//i.test(goal.material_url || '') && <section className="surface mb-4"><div className="card-heading"><h2>Material da meta</h2></div><a className="btn" href={goal.material_url} target="_blank" rel="noopener noreferrer">Acessar material ↗</a></section>}

@@ -38,3 +38,8 @@ O build é `npm run build`. A migração e o teste de permissões são separados
 
 As metas e os modelos incluem Observações do professor, exibidas ao aluno e copiadas tanto na importação individual quanto por pacote. A migração 0008_teacher_notes.sql adiciona esse campo sem alterar registros existentes.
 A renovação da sessão na mesma conta preserva os formulários montados; sair ou trocar de conta continua limpando o contexto anterior.
+
+A atualização 0009_goal_planning.sql acrescenta prioridade, quantidade prevista de questões, anexos privados e início persistente do cronômetro por meta. O cabeçalho do dia abre a visão diária e a seleção de uma meta abre o editor ao lado (em telas menores, abaixo).
+Status: concluída tem precedência; cronômetro ativo ou tempo acumulado indica em andamento; sem estudo e com prazo vencido indica atrasada; os demais ficam pendentes. Cada meta mantém seu próprio cronômetro ao navegar. Pausar grava o intervalo com bloqueio da linha; repetir iniciar/pausar não duplica tempo. Concluir encerra a contagem.
+Anexos: PDF, PNG/JPEG, TXT e DOCX, até 20 MB. O bucket é privado; professor e aluno com a meta atribuída podem baixar. Remover um anexo desvincula apenas daquela definição, preservando cópias já atribuídas. Uploads são feitos antes de salvar a definição; cancelar pode deixar arquivo privado sem vínculo, sem publicação para alunos.
+Verificações focadas: tests/planning-database.mjs (importação, acesso aos anexos e cronômetros independentes) e tests/planning-browser.cjs (dia, editor lateral, campos, upload e navegação entre cronômetros).
