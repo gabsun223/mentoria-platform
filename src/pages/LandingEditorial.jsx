@@ -15,7 +15,7 @@ const routine = {
   Qui: ['Processo Civil', 'Recursos', 'Direito Financeiro', 'Orçamento público'],
   Sex: ['Direito Tributário', 'Crédito tributário', 'Revisão da semana', 'Retome os pontos de atenção'],
 }
-function Brand() { return <span className="ed-brand"><span className="ed-brand-symbol" aria-hidden="true">m<span>.</span></span><span>mentoria<small>PROCURADORIAS</small></span></span> }
+function Brand() { return <span className="ed-brand"><span className="ed-brand-symbol" aria-hidden="true">m<span>.</span></span><span>mentoria<small>CONCURSOS</small></span></span> }
 
 export default function LandingEditorial() {
   const [menu, setMenu] = useState(false)
@@ -24,7 +24,7 @@ export default function LandingEditorial() {
   return <div className="editorial-landing">
     <a className="ed-skip" href="#ed-inicio">Pular para o conteúdo</a>
     <header className="ed-header ed-container">
-      <Link to="/" aria-label="Mentoria Procuradorias — início"><Brand /></Link>
+      <Link to="/" aria-label="Minha Mentoria — início"><Brand /></Link>
       <nav id="ed-navigation" className={menu ? 'ed-navigation open' : 'ed-navigation'} aria-label="Navegação da apresentação">
         <a href="#ed-pilares" onClick={() => setMenu(false)}>Nossa essência</a><a href="#ed-metodo" onClick={() => setMenu(false)}>Como funciona</a><a href="#ed-duvidas" onClick={() => setMenu(false)}>Dúvidas</a>
       </nav>
@@ -33,7 +33,7 @@ export default function LandingEditorial() {
     </header>
     <main id="ed-inicio">
       <section className="ed-hero ed-container">
-        <div className="ed-hero-copy"><span className="ed-overline"><i /> MENTORIA PARA CARREIRAS DE PROCURADORIA</span>
+        <div className="ed-hero-copy"><span className="ed-overline"><i /> MENTORIA PARA CONCURSOS</span>
           <h1>Um caminho claro.<br />Uma mente <em>livre<br />para estudar.</em></h1>
           <p>Você não precisa decidir tudo, todos os dias. Organize sua preparação, encontre seu ritmo e avance com alguém acompanhando o caminho.</p>
           <div className="ed-hero-actions"><Link className="ed-button" to="/cadastro">Quero organizar minha preparação <span aria-hidden="true">↗</span></Link><a className="ed-text-link" href="#ed-metodo">Conheça o método <span aria-hidden="true">↓</span></a></div>
@@ -53,7 +53,7 @@ export default function LandingEditorial() {
         </div>
       </section>
       <section className="ed-principles ed-container" aria-label="Os quatro pilares"><span>O QUE SUSTENTA<br />A SUA JORNADA</span><p>Organização <i>·</i> Foco <i>·</i> Constância <i>·</i> Despreocupação</p></section>
-      <section className="ed-essence ed-container" id="ed-pilares"><div className="ed-section-intro"><div><span className="ed-overline">NOSSA ESSÊNCIA</span><h2>Estudar com seriedade.<br /><em>Seguir com tranquilidade.</em></h2></div><p>Preparar-se para uma procuradoria exige dedicação. A nossa proposta é dar estrutura a esse esforço, com clareza para agir e espaço para respirar.</p></div>
+      <section className="ed-essence ed-container" id="ed-pilares"><div className="ed-section-intro"><div><span className="ed-overline">NOSSA ESSÊNCIA</span><h2>Estudar com seriedade.<br /><em>Seguir com tranquilidade.</em></h2></div><p>Preparar-se para um concurso exige dedicação. A nossa proposta é dar estrutura a esse esforço, com clareza para agir e espaço para respirar.</p></div>
         <div className="ed-pillars">{pillars.map(([n,title,subtitle,copy])=><article key={n}><div className="ed-pillar-top"><span>{n}</span><span aria-hidden="true">{['▤','◎','↗','≈'][Number(n)-1]}</span></div><h3>{title}</h3><strong>{subtitle}</strong><p>{copy}</p></article>)}</div>
       </section>
       <section className="ed-method" id="ed-metodo"><div className="ed-container ed-method-layout"><div><span className="ed-overline">O MÉTODO, NA PRÁTICA</span><h2>O plano acompanha<br />a sua vida.<br /><em>E você avança.</em></h2><p>Uma preparação não precisa ser perfeita para ser consistente. Precisa ter direção, continuidade e espaço para ajustes.</p><Link to="/cadastro" className="ed-method-link">Dar o primeiro passo <span aria-hidden="true">↗</span></Link></div><ol>{[['Começamos pela sua realidade.','Seu momento, seu objetivo e o tempo disponível orientam a construção do plano.'],['Transformamos o objetivo em rotina.','Disciplinas, revisões e questões ganham lugar na semana, com prioridades claras.'],['Acompanhamos para ajustar.','Metas e desempenho ajudam a perceber avanços e recalcular a rota quando necessário.']].map(([title,copy],i)=><li key={title}><span>0{i+1}</span><div><h3>{title}</h3><p>{copy}</p></div></li>)}</ol></div></section>
@@ -66,6 +66,6 @@ export default function LandingEditorial() {
       ].map(([q,a])=><details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
       <section className="ed-cta ed-container"><div><span className="ed-overline">SEU PRÓXIMO PASSO</span><h2>Mais direção para o estudo.<br /><em>Mais leveza para a jornada.</em></h2></div><div><Link className="ed-button" to="/cadastro">Começar minha preparação <span aria-hidden="true">↗</span></Link><p>Organização para hoje. Constância para seguir.</p></div></section>
     </main>
-    <footer className="ed-footer ed-container"><Link to="/" aria-label="Mentoria Procuradorias — início"><Brand /></Link><p>Organização. Foco. Constância.<br /><span>Um caminho construído com você.</span></p><a href="#ed-inicio">Voltar ao início ↑</a></footer>
+    <footer className="ed-footer ed-container"><Link to="/" aria-label="Minha Mentoria — início"><Brand /></Link><p>Organização. Foco. Constância.<br /><span>Um caminho construído com você.</span></p><a href="#ed-inicio">Voltar ao início ↑</a></footer>
   </div>
 }
