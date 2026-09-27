@@ -1,3 +1,4 @@
+import FloatingStudyClock from './components/FloatingStudyClock'
 import { useAuth } from './context/AuthContext'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -37,9 +38,9 @@ function StudentPage({ children }) {
 }
 
 export default function App() {
-  const { session, loading } = useAuth()
+  const { session, loading, profile } = useAuth()
   return (
-    <Routes>
+    <><Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/cadastro" element={<Signup />} />
       <Route path="/apresentacao" element={<LandingEditorial />} />
@@ -114,6 +115,6 @@ export default function App() {
       <Route path="/encontros" element={<ProtectedRoute><Layout><Resources type="meetings" /></Layout></ProtectedRoute>} />
       <Route path="/materiais" element={<ProtectedRoute><Layout><StudentPage><Resources type="materials" /></StudentPage></Layout></ProtectedRoute>} />
       <Route path="/estudos" element={<ProtectedRoute><Layout><StudentPage><Resources type="study" /></StudentPage></Layout></ProtectedRoute>} />
-    </Routes>
+    </Routes>{session && profile?.role === 'student' && <FloatingStudyClock key={session.user.id} userId={session.user.id}/>}</>
   )
 }

@@ -9,7 +9,7 @@ export default function Dashboard(){
  const {goals,exams,records,profile,loading,error,reload}=useWorkspace()
  const [focus,setFocus]=useState(''),[offset,setOffset]=useState(0),week=weekDates(0)
  const day=dateKey(addDays(new Date(),offset)),today=goals.filter(g=>g.due_date===dateKey()),shown=goals.filter(g=>g.due_date===day).sort(goalOrder),weekly=goals.filter(g=>g.due_date>=week.from&&g.due_date<=week.to),pending=goals.filter(g=>!g.completed).sort(goalOrder)
- const stats=accuracyTotals(goals,exams),currentFocus=pending.some(g=>g.id===focus)?focus:pending[0]?.id
+ const stats=accuracyTotals([...goals,...records.filter(r=>!r.goal_id)],exams),currentFocus=pending.some(g=>g.id===focus)?focus:pending[0]?.id
  const dailyTime=records.filter(r=>r.study_date===dateKey()).reduce((n,r)=>n+r.seconds,0)
  return <><PageTitle title={'Olá, '+(profile.full_name?.split(' ')[0]||'estudante')+'!'} subtitle="Vamos avançar mais um pouco hoje?"/>
  {error&&<p className="notice error" role="alert">{error}<button onClick={reload}>Tentar novamente</button></p>}{loading&&<p>Carregando estudos…</p>}

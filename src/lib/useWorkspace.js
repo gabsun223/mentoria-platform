@@ -24,6 +24,6 @@ export default function useWorkspace() {
    setGoals(g.data);setExams(e.data);setRecords(r.data);setCompletions(c.data)
   } catch(e){if(version===generation.current)setError('Não foi possível carregar os dados. '+e.message)}finally{if(version===generation.current)setLoading(false)}
  },[user.id,profile.role])
- useEffect(()=>{load();return()=>{generation.current++}},[load])
+ useEffect(()=>{load();window.addEventListener('study-saved',load);return()=>{generation.current++;window.removeEventListener('study-saved',load)}},[load])
  return {students,goals,exams,records,completions,error,loading,reload:load,user,profile}
 }

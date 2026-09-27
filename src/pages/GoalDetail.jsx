@@ -73,6 +73,8 @@ export default function GoalDetail() {
 
     setLoading(false)
   }, [id, user?.id])
+  useEffect(() => { window.addEventListener('study-saved', load); return () => window.removeEventListener('study-saved', load) }, [load])
+
 
   useEffect(() => {
     load()
