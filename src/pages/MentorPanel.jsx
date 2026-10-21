@@ -75,6 +75,24 @@ export default function MentorPanel() {
       setNotice((e.draft?.id ? 'A meta já existe, mas o salvamento não terminou. Tente salvar novamente para concluir sem duplicar. ' : 'Não foi possível salvar. ') + e.message)
     } finally { setBusy(false) }
   }
+  async function deleteGoal() {
+    if (busy || !currentStudent || !form?.id || form.student_id !== student) return
+    const target = form
+    if (target.timer_started_at) {
+      setNotice('Pause o cronômetro desta meta antes de excluí-la.')
+      return
+    }
+    if (!window.confirm(`Excluir a meta “${target.topic || target.title}” de ${studentName}?\n\nEla será removida do calendário do aluno. Os registros de estudo existentes e a meta do catálogo serão preservados. Esta exclusão não pode ser desfeita.`)) return
+    setBusy(true); setNotice('')
+    try {
+      const r = await supabase.from('goals').delete().eq('id', target.id).eq('student_id', target.student_id).is('timer_started_at', null).select('id')
+      if (r.error) throw r.error
+      if (r.data?.length !== 1) throw Error('A meta não foi removida. Confira sua permissão e se o cronômetro está pausado.')
+      setForm(null); setSelected(ids => ids.filter(id => id !== target.id)); await reload()
+      setNotice('Meta excluída de ' + studentName + '. Os registros de estudo foram preservados.')
+    } catch (e) { setNotice('Não foi possível excluir a meta. ' + e.message) }
+    finally { setBusy(false) }
+  }
   async function importTemplate(template) {
     if (busy || !currentStudent || !picker.date) return
     setBusy(true)
@@ -142,7 +160,7 @@ export default function MentorPanel() {
         {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong> · Dia {format(new Date(form.due_date + 'T12:00:00'), 'dd/MM/yyyy')}</p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
           <GoalDefinitionFields value={form} onChange={setForm} onBusyChange={setBusy} subjects={[...new Set(catalog.templates.map(t => t.category))]}/>
           {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!catalogReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda esta matéria, assunto, categoria e link para reutilizar em outras metas.</p>{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
-          <div className="editor-footer"><button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
+          <div className="editor-footer">{form.id && !form.isNew && <button type="button" className="btn danger" onClick={deleteGoal}>Excluir meta</button>}<button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
         </fieldset></form></section>}
       </div>
     </>}
