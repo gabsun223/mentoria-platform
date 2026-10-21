@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { format, startOfWeek } from 'date-fns'
+import DeleteGoalDialog from '../components/DeleteGoalDialog'
 import WeeklyGoalCalendar from '../components/WeeklyGoalCalendar'
 import WeekGoalPicker from '../components/WeekGoalPicker'
 import GoalDefinitionFields from '../components/GoalDefinitionFields'
@@ -27,6 +28,7 @@ export default function MentorPanel() {
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
   const [selected, setSelected] = useState([]), [batchDate, setBatchDate] = useState('')
   const [showPack, setShowPack] = useState(!!params.get('pacote')), [packId, setPackId] = useState(params.get('pacote') || '')
+  const [deleteTarget, setDeleteTarget] = useState(null), [deleteError, setDeleteError] = useState('')
   const editorRef = useRef(null)
   const mine = students.filter(s => s.mentor_id === user.id)
   const currentStudent = mine.find(s => s.id === student)
@@ -39,7 +41,7 @@ export default function MentorPanel() {
   // Only the manual creation/editing flow scrolls to the lower form.
   useEffect(() => { if (form && !day) editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [!!form])
   useEffect(() => {
-    setDay(''); setSelected([]); setBatchDate(''); setForm(null); setPicker(null); setNotice('')
+    setDay(''); setSelected([]); setBatchDate(''); setForm(null); setPicker(null); setNotice(''); setDeleteTarget(null); setDeleteError('')
   }, [student, all, offset, status])
 
   function changeFilter(key, value) {
@@ -75,21 +77,26 @@ export default function MentorPanel() {
       setNotice((e.draft?.id ? 'A meta já existe, mas o salvamento não terminou. Tente salvar novamente para concluir sem duplicar. ' : 'Não foi possível salvar. ') + e.message)
     } finally { setBusy(false) }
   }
-  async function deleteGoal(target) {
+  function requestDelete(target) {
+    if (busy || !currentStudent || target?.student_id !== student) return
+    setDeleteError(''); setDeleteTarget(target)
+  }
+  async function deleteGoal() {
+    const target = deleteTarget
     if (busy || !currentStudent || !target?.id || target.student_id !== student) return
     if (target.timer_started_at) {
-      setNotice('Pause o cronômetro desta meta antes de excluí-la.')
+      setDeleteError('Pause o cronômetro desta meta antes de excluí-la.')
       return
     }
-    if (!window.confirm(`Excluir a meta “${target.topic || target.title}” de ${studentName}?\n\nEla será removida do calendário do aluno. Os registros de estudo existentes e a meta do catálogo serão preservados. Esta exclusão não pode ser desfeita.`)) return
-    setBusy(true); setNotice('')
+    setBusy(true); setNotice(''); setDeleteError('')
     try {
       const r = await supabase.from('goals').delete().eq('id', target.id).eq('student_id', target.student_id).is('timer_started_at', null).select('id')
       if (r.error) throw r.error
       if (r.data?.length !== 1) throw Error('A meta não foi removida. Confira sua permissão e se o cronômetro está pausado.')
       setForm(current => current?.id === target.id ? null : current); setSelected(ids => ids.filter(id => id !== target.id)); await reload()
+      setDeleteTarget(null)
       setNotice('Meta excluída de ' + studentName + '. Os registros de estudo foram preservados.')
-    } catch (e) { setNotice('Não foi possível excluir a meta. ' + e.message) }
+    } catch (e) { setDeleteError('Não foi possível excluir a meta. ' + e.message) }
     finally { setBusy(false) }
   }
   async function importTemplate(template) {
@@ -130,6 +137,7 @@ export default function MentorPanel() {
   }
 
   return <>
+    {deleteTarget && <DeleteGoalDialog goal={deleteTarget} studentName={studentName} busy={busy} error={deleteError} onCancel={() => { if (!busy) setDeleteTarget(null) }} onConfirm={deleteGoal}/>}
     <PageTitle title="Metas semanais" subtitle="Escolha o aluno para organizar as metas da semana."><div className="toolbar-actions"><Link className="btn" to="/mentor/catalogo">Catálogo de metas</Link><Link className="btn" to="/mentor/pacotes">Pacotes semanais</Link><Link className="btn" to="/edital">Edital</Link></div></PageTitle>
     {(error || notice) && <p className={'notice ' + (error ? 'error' : '')} role="status">{error || notice}</p>}
     <fieldset disabled={busy} className="toolbar">
@@ -153,13 +161,13 @@ export default function MentorPanel() {
               <button className="btn primary" disabled={busy || !packId || all} onClick={importPack}>Importar pacote para esta semana</button>{all && <p>Desmarque “Todo o histórico” para escolher a semana.</p>}
             </>}
           </section>}
-          {day && <button className="btn" disabled={busy} onClick={() => { setDay(''); setForm(null); setSelected([]); setPicker(null) }}>← Voltar à semana</button>}{loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} dayOnly={day} onDay={date => { setDay(date); setForm(null); setPicker(null); setSelected([]) }} onEdit={edit} onDelete={deleteGoal} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
+          {day && <button className="btn" disabled={busy} onClick={() => { setDay(''); setForm(null); setSelected([]); setPicker(null) }}>← Voltar à semana</button>}{loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} dayOnly={day} onDay={date => { setDay(date); setForm(null); setPicker(null); setSelected([]) }} onEdit={edit} onDelete={requestDelete} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
           {picker && <WeekGoalPicker catalog={catalog} picker={picker} studentName={studentName} busy={busy} onDate={date => setPicker(p => ({ ...p, date, draft: null }))} onImport={importTemplate} onCreate={createGoal} onClose={() => setPicker(null)}/>}
         </Card>
         {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong> · Dia {format(new Date(form.due_date + 'T12:00:00'), 'dd/MM/yyyy')}</p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
           <GoalDefinitionFields value={form} onChange={setForm} onBusyChange={setBusy} subjects={[...new Set(catalog.templates.map(t => t.category))]}/>
           {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!catalogReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda esta matéria, assunto, categoria e link para reutilizar em outras metas.</p>{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
-          <div className="editor-footer">{form.id && !form.isNew && <button type="button" className="btn danger" onClick={() => deleteGoal(form)}>Excluir meta</button>}<button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
+          <div className="editor-footer">{form.id && !form.isNew && <button type="button" className="btn danger" onClick={() => requestDelete(form)}>Excluir meta</button>}<button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
         </fieldset></form></section>}
       </div>
     </>}
