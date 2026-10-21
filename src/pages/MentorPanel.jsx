@@ -75,9 +75,8 @@ export default function MentorPanel() {
       setNotice((e.draft?.id ? 'A meta já existe, mas o salvamento não terminou. Tente salvar novamente para concluir sem duplicar. ' : 'Não foi possível salvar. ') + e.message)
     } finally { setBusy(false) }
   }
-  async function deleteGoal() {
-    if (busy || !currentStudent || !form?.id || form.student_id !== student) return
-    const target = form
+  async function deleteGoal(target) {
+    if (busy || !currentStudent || !target?.id || target.student_id !== student) return
     if (target.timer_started_at) {
       setNotice('Pause o cronômetro desta meta antes de excluí-la.')
       return
@@ -88,7 +87,7 @@ export default function MentorPanel() {
       const r = await supabase.from('goals').delete().eq('id', target.id).eq('student_id', target.student_id).is('timer_started_at', null).select('id')
       if (r.error) throw r.error
       if (r.data?.length !== 1) throw Error('A meta não foi removida. Confira sua permissão e se o cronômetro está pausado.')
-      setForm(null); setSelected(ids => ids.filter(id => id !== target.id)); await reload()
+      setForm(current => current?.id === target.id ? null : current); setSelected(ids => ids.filter(id => id !== target.id)); await reload()
       setNotice('Meta excluída de ' + studentName + '. Os registros de estudo foram preservados.')
     } catch (e) { setNotice('Não foi possível excluir a meta. ' + e.message) }
     finally { setBusy(false) }
@@ -154,13 +153,13 @@ export default function MentorPanel() {
               <button className="btn primary" disabled={busy || !packId || all} onClick={importPack}>Importar pacote para esta semana</button>{all && <p>Desmarque “Todo o histórico” para escolher a semana.</p>}
             </>}
           </section>}
-          {day && <button className="btn" disabled={busy} onClick={() => { setDay(''); setForm(null); setSelected([]); setPicker(null) }}>← Voltar à semana</button>}{loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} dayOnly={day} onDay={date => { setDay(date); setForm(null); setPicker(null); setSelected([]) }} onEdit={edit} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
+          {day && <button className="btn" disabled={busy} onClick={() => { setDay(''); setForm(null); setSelected([]); setPicker(null) }}>← Voltar à semana</button>}{loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} dayOnly={day} onDay={date => { setDay(date); setForm(null); setPicker(null); setSelected([]) }} onEdit={edit} onDelete={deleteGoal} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
           {picker && <WeekGoalPicker catalog={catalog} picker={picker} studentName={studentName} busy={busy} onDate={date => setPicker(p => ({ ...p, date, draft: null }))} onImport={importTemplate} onCreate={createGoal} onClose={() => setPicker(null)}/>}
         </Card>
         {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong> · Dia {format(new Date(form.due_date + 'T12:00:00'), 'dd/MM/yyyy')}</p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
           <GoalDefinitionFields value={form} onChange={setForm} onBusyChange={setBusy} subjects={[...new Set(catalog.templates.map(t => t.category))]}/>
           {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!catalogReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda esta matéria, assunto, categoria e link para reutilizar em outras metas.</p>{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
-          <div className="editor-footer">{form.id && !form.isNew && <button type="button" className="btn danger" onClick={deleteGoal}>Excluir meta</button>}<button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
+          <div className="editor-footer">{form.id && !form.isNew && <button type="button" className="btn danger" onClick={() => deleteGoal(form)}>Excluir meta</button>}<button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
         </fieldset></form></section>}
       </div>
     </>}
