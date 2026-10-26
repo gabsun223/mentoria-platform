@@ -22,7 +22,7 @@ export default function WeeklyGoalCalendar({ start, goals, onEdit, onDelete, onA
           {g.attachments?.length > 0 && <small>📎 {g.attachments.length} anexo(s)</small>}
           {(g.completed || g.time_seconds>0) && <p className="goal-metric">Tempo total: {hours(g.time_seconds || 0)}</p>}
           {g.questions_total>0 && <p className="goal-metric">{Math.round(g.questions_correct/g.questions_total*100)}% de acertos <small>({g.questions_correct}/{g.questions_total})</small></p>}
-          {onEdit && <Link className="text-action" to={'/metas/'+g.id}>Ver estudo →</Link>}
+          {onEdit && <div className="calendar-card-footer"><button className="text-action" disabled={disabled} onClick={()=>onEdit(g)}>Editar meta</button><Link className="text-action" to={'/metas/'+g.id}>Ver estudo →</Link></div>}
         </article>)}
         {!rows.length && <p className="calendar-empty">Sem metas</p>}
         {onAdd && <button disabled={disabled} className="calendar-add" onClick={()=>onAdd(key)}>＋ Adicionar meta</button>}

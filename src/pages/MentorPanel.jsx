@@ -1,7 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { format, startOfWeek } from 'date-fns'
+import { differenceInCalendarWeeks, format, startOfWeek } from 'date-fns'
 import DeleteGoalDialog from '../components/DeleteGoalDialog'
+import EditorDialog from '../components/EditorDialog'
+import DraftNotice from '../components/DraftNotice'
+import useEditorDraft from '../lib/useEditorDraft'
 import WeeklyGoalCalendar from '../components/WeeklyGoalCalendar'
 import WeekGoalPicker from '../components/WeekGoalPicker'
 import GoalDefinitionFields from '../components/GoalDefinitionFields'
@@ -24,12 +27,12 @@ export default function MentorPanel() {
   const student = params.get('aluno') || '', all = params.get('periodo') === 'todos'
   const [day, setDay] = useState('')
   const [offset, setOffset] = useState(0), [status, setStatus] = useState('')
-  const [form, setForm] = useState(null), [picker, setPicker] = useState(null)
+  const { form, draft, setForm, open: openEditor, close: closeEditor, resume, storageError } = useEditorDraft(user.id + ':goal:' + student)
+  const [picker, setPicker] = useState(null)
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('')
   const [selected, setSelected] = useState([]), [batchDate, setBatchDate] = useState('')
   const [showPack, setShowPack] = useState(!!params.get('pacote')), [packId, setPackId] = useState(params.get('pacote') || '')
   const [deleteTarget, setDeleteTarget] = useState(null), [deleteError, setDeleteError] = useState('')
-  const editorRef = useRef(null)
   const mine = students.filter(s => s.mentor_id === user.id)
   const currentStudent = mine.find(s => s.id === student)
   const studentName = currentStudent?.full_name || 'Aluno sem nome'
@@ -38,11 +41,17 @@ export default function MentorPanel() {
   const calendarStarts = day ? [dateKey(startOfWeek(new Date(day + 'T12:00:00'), { weekStartsOn: 1 }))] : all ? [...new Set(filtered.map(g => dateKey(startOfWeek(new Date(g.due_date + 'T12:00:00'), { weekStartsOn: 1 }))))].sort().reverse() : [week.from]
   const catalogReady = !catalog.error && !catalog.loading
 
-  // Only the manual creation/editing flow scrolls to the lower form.
-  useEffect(() => { if (form && !day) editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, [!!form])
   useEffect(() => {
-    setDay(''); setSelected([]); setBatchDate(''); setForm(null); setPicker(null); setNotice(''); setDeleteTarget(null); setDeleteError('')
+    setDay(''); setSelected([]); setBatchDate(''); setPicker(null); setNotice(''); setDeleteTarget(null); setDeleteError('')
   }, [student, all, offset, status])
+
+  useEffect(() => {
+    const id = params.get('meta')
+    if (!id || loading || !currentStudent) return
+    const goal = goals.find(g => g.id === id && g.student_id === student)
+    if (goal) openEditor({ ...goal, ...definitionFrom(goal) })
+    const next = new URLSearchParams(params); next.delete('meta'); setParams(next, { replace: true })
+  }, [loading, student, params.get('meta'), currentStudent?.id])
 
   function changeFilter(key, value) {
     const next = new URLSearchParams(params)
@@ -52,7 +61,8 @@ export default function MentorPanel() {
   const focusedDay = day
   function openPicker(day) {
     if (!currentStudent) return
-    setForm(null); setShowPack(false); setNotice('')
+    if (draft) { resume(); return }
+    setShowPack(false); setNotice('')
     setPicker({ date: typeof day === 'string' ? day : focusedDay || (all ? dateKey() : week.from) })
   }
   function createGoal() {
@@ -61,7 +71,7 @@ export default function MentorPanel() {
   function edit(goal) {
     setDay(goal.due_date); setSelected([])
     setPicker(null); setNotice('')
-    setForm({ ...goal, ...definitionFrom(goal) })
+    openEditor({ ...goal, ...definitionFrom(goal) })
   }
   async function save(e) {
     e.preventDefault(); if (busy || !currentStudent || form.student_id !== student) return
@@ -69,7 +79,9 @@ export default function MentorPanel() {
     try {
       await saveAssignedGoal(form, { onProgress: setForm })
       const added = form.addToCatalog
-      setForm(null); await reload()
+      setForm(null); setDay('')
+      if (!all) setOffset(differenceInCalendarWeeks(new Date(form.due_date + 'T12:00:00'), new Date(), { weekStartsOn: 1 }))
+      await reload()
       if (added) await catalog.reload()
       setNotice(added ? 'Meta salva para o aluno e incluída no catálogo.' : 'Meta salva com sucesso.')
     } catch (e) {
@@ -102,7 +114,7 @@ export default function MentorPanel() {
   async function importTemplate(template) {
     if (busy || !currentStudent || !picker.date) return
     setBusy(true)
-    const draft = picker.draft?.id ? picker.draft : { ...fresh(student, picker.date), ...definitionFrom(template), importLegacyBlocks: true, goal_blocks: template.blocks.map(b => ({ title: b.title, topic: b.topic, material_url: b.material_url })) }
+    const draft = picker.draft?.id ? picker.draft : { ...fresh(student, picker.date), ...definitionFrom(template), importLegacyBlocks: true, goal_blocks: (template.blocks || []).map(b => ({ title: b.title, topic: b.topic, material_url: b.material_url })) }
     try {
       await saveAssignedGoal(draft, { onProgress: saved => setPicker(p => ({ ...p, draft: saved })) })
       setPicker(null); await reload(); setNotice('Meta importada para ' + studentName + '.')
@@ -120,7 +132,8 @@ export default function MentorPanel() {
     try {
       const r = await supabase.from('goals').update({ due_date: batchDate }).eq('student_id', student).in('id', selected).select('id')
       if (r.error) throw r.error
-      setSelected([]); setBatchDate(''); setForm(null); await reload()
+      if (r.data.length !== selected.length) throw Error('Nem todas as metas puderam ser reagendadas. Atualize a página e confira as datas antes de tentar novamente.')
+      setSelected([]); setBatchDate(''); await reload()
       setNotice(r.data.length + (r.data.length === 1 ? ' meta reagendada.' : ' metas reagendadas.'))
     } catch (e) { setNotice('Não foi possível alterar a data. ' + e.message) }
     finally { setBusy(false) }
@@ -146,7 +159,7 @@ export default function MentorPanel() {
     </fieldset>
     {!currentStudent ? <p className="student-selection-hint">{loading ? 'Carregando alunos…' : student ? 'Selecione um aluno vinculado à sua mentoria.' : 'Selecione um aluno acima para visualizar e editar suas metas.'}</p> : <>
       <div className="editing-student"><Avatar name={studentName}/><div><small>Editando metas de</small><strong>{studentName}</strong><span>{all ? 'Todo o histórico' : format(week.start, 'dd/MM/yyyy') + ' a ' + format(week.end, 'dd/MM/yyyy')}</span></div></div>
-      <div className={'goals-workspace ' + (day && form ? 'editing day-editing' : '')}>
+      <DraftNotice draft={!form && draft} onResume={resume}/><div className="goals-workspace">
         <Card title={'Metas de ' + studentName} subtitle={filtered.length + ' metas no período'} action={<div className="toolbar-actions"><button className="btn primary" disabled={busy} onClick={openPicker}>＋ Adicionar meta</button><button className="btn" disabled={busy} onClick={() => setShowPack(!showPack)}>Importar pacote semanal</button></div>}>
           <fieldset disabled={busy} className="week-selection-toolbar">
             <label className="check-label"><input type="checkbox" disabled={!filtered.length} checked={!!filtered.length && filtered.every(g => selected.includes(g.id))} onChange={e => selectGoals(e.target.checked ? filtered.map(g => g.id) : [])}/>Selecionar todas</label>
@@ -161,14 +174,19 @@ export default function MentorPanel() {
               <button className="btn primary" disabled={busy || !packId || all} onClick={importPack}>Importar pacote para esta semana</button>{all && <p>Desmarque “Todo o histórico” para escolher a semana.</p>}
             </>}
           </section>}
-          {day && <button className="btn" disabled={busy} onClick={() => { setDay(''); setForm(null); setSelected([]); setPicker(null) }}>← Voltar à semana</button>}{loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} dayOnly={day} onDay={date => { setDay(date); setForm(null); setPicker(null); setSelected([]) }} onEdit={edit} onDelete={requestDelete} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
+          {day && <button className="btn" disabled={busy} onClick={() => { setDay(''); setSelected([]); setPicker(null) }}>← Voltar à semana</button>}{loading ? <Empty>Carregando metas…</Empty> : calendarStarts.length ? calendarStarts.map(start => <section key={start}><h3 className="calendar-week-label">Semana de {format(new Date(start + 'T12:00:00'), 'dd/MM/yyyy')}</h3><WeeklyGoalCalendar start={new Date(start + 'T12:00:00')} goals={filtered} dayOnly={day} onDay={date => { setDay(date); setPicker(null); setSelected([]) }} onEdit={edit} onDelete={requestDelete} onAdd={openPicker} selected={selected} disabled={busy} onSelect={(id, checked) => selectGoals(checked ? [...selected,id] : selected.filter(x => x !== id))}/></section>) : <Empty>Nenhuma meta neste período.</Empty>}
           {picker && <WeekGoalPicker catalog={catalog} picker={picker} studentName={studentName} busy={busy} onDate={date => setPicker(p => ({ ...p, date, draft: null }))} onImport={importTemplate} onCreate={createGoal} onClose={() => setPicker(null)}/>}
         </Card>
-        {form && <section ref={editorRef} className="surface goal-editor"><div className="card-heading"><div><h2><Icon name="edit"/>{form.isNew ? 'Nova meta' : 'Editar meta'}</h2><p>Aluno: <strong>{studentName}</strong> · Dia {format(new Date(form.due_date + 'T12:00:00'), 'dd/MM/yyyy')}</p></div></div><form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
-          <GoalDefinitionFields value={form} onChange={setForm} onBusyChange={setBusy} subjects={[...new Set(catalog.templates.map(t => t.category))]}/>
-          {form.isNew && <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!catalogReady} checked={form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Guarda esta matéria, assunto, categoria e link para reutilizar em outras metas.</p>{catalog.error && <p className="notice">{catalog.error}</p>}</div>}
-          <div className="editor-footer">{form.id && !form.isNew && <button type="button" className="btn danger" onClick={() => requestDelete(form)}>Excluir meta</button>}<button type="button" className="btn" onClick={() => setForm(null)}>Cancelar</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
-        </fieldset></form></section>}
+        {form && <EditorDialog title={form.isNew ? 'Nova meta' : 'Editar meta'} subtitle={'Aluno: ' + studentName} busy={busy} onClose={closeEditor}>
+          {notice && <p className="notice" role="status">{notice}</p>}{storageError && <p className="notice error">{storageError}</p>}
+          <form onSubmit={save}><fieldset disabled={busy} className="editor-fields">
+            <label>Dia da meta<input aria-label="Dia da meta" type="date" required className="field" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })}/></label>
+            <GoalDefinitionFields value={form} onChange={setForm} onBusyChange={setBusy}/>
+            <div className="catalog-save-choice"><label className="check-label"><input type="checkbox" disabled={!catalogReady} checked={!!form.addToCatalog} onChange={e => setForm({ ...form, addToCatalog: e.target.checked })}/>Também incluir esta meta no catálogo</label><p className="muted small">Cria um modelo reutilizável, sem copiar o tempo nem os resultados do aluno.</p></div>
+            <p className="muted small">Rascunho guardado nesta aba. Fechar o editor permite retomar depois.</p>
+            <div className="editor-footer"><button type="button" className="btn" onClick={() => setForm(null)}>Descartar rascunho</button><button type="button" className="btn" onClick={closeEditor}>Continuar depois</button><button className="btn primary" type="submit">{busy ? 'Salvando…' : 'Salvar alterações'}</button></div>
+          </fieldset></form>
+        </EditorDialog>}
       </div>
     </>}
   </>

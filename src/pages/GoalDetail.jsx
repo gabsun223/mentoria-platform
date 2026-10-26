@@ -156,8 +156,8 @@ export default function GoalDetail() {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-4">
-        <Link to={isMentor ? "/mentor" : "/semana"} className="text-sm text-ink-muted hover:text-ink flex items-center gap-1">
-          ← {isMentor ? 'Voltar aos alunos' : 'Voltar ao Cronograma'}
+        <Link to={isMentor ? "/mentor/metas?aluno=" + goal.student_id + "&periodo=todos" : "/semana"} className="text-sm text-ink-muted hover:text-ink flex items-center gap-1">
+          ← {isMentor ? 'Voltar ao cronograma do aluno' : 'Voltar ao Cronograma'}
         </Link>
         <div className="flex items-center gap-2 text-xs font-mono text-ink-muted">
           <button
@@ -211,7 +211,7 @@ export default function GoalDetail() {
 
       <div className="mb-4">
         {notice && <p className="notice error" role="alert">{notice}</p>}
-        {isMentor ? <p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p> : <StudyTimer key={'timer-'+goal.id} goal={goal} onTimerChange={handleTimerChange} onBusyChange={setTimerBusy} />}
+        {isMentor ? <div className="toolbar"><p>Tempo estudado pelo aluno: {Math.floor((goal.time_seconds || 0) / 60)} minutos</p><Link className="btn primary" to={'/mentor/metas?aluno=' + goal.student_id + '&periodo=todos&meta=' + goal.id}>Editar esta meta</Link></div> : <StudyTimer key={'timer-'+goal.id} goal={goal} onTimerChange={handleTimerChange} onBusyChange={setTimerBusy} />}
         {!isMentor && <button className="btn" disabled={concluding} onClick={()=>openRecord(false)}>Registrar ou ajustar estudo</button>}
       </div>
 

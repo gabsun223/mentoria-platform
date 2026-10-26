@@ -14,6 +14,10 @@ export async function saveAssignedGoal(draft, { onProgress = () => {} } = {}) {
     if (result.error) throw result.error
     saved = { ...saved, id: result.data.id }
     onProgress(saved)
+    for (const block of saved.goal_blocks.filter(b => b.id)) {
+      const response = await supabase.from('goal_blocks').update({ title: block.title, topic: block.topic, material_url: block.material_url }).eq('id', block.id).eq('goal_id', saved.id).select().single()
+      if (response.error) throw response.error
+    }
     // Only legacy templates may still carry additional material/notes.
     if (saved.importLegacyBlocks) for (let i = 0; i < saved.goal_blocks.length; i++) {
       const block = saved.goal_blocks[i]
@@ -26,7 +30,7 @@ export async function saveAssignedGoal(draft, { onProgress = () => {} } = {}) {
     if (saved.addToCatalog) {
       saved = { ...saved, catalogModelId: saved.catalogModelId || crypto.randomUUID() }
       onProgress(saved)
-      const response = await supabase.from('goal_templates').upsert({ id: saved.catalogModelId, ...definition, blocks: [] }).select().single()
+      const response = await supabase.from('goal_templates').upsert({ id: saved.catalogModelId, ...definition, blocks: saved.goal_blocks.map(b => ({ title: b.title, topic: b.topic, material_url: b.material_url })) }).select().single()
       if (response.error) throw response.error
     }
     return saved

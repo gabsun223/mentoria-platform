@@ -17,9 +17,9 @@ export function definitionPayload(form) {
   if (!category || !topic) throw Error('Preencha a matéria e o assunto.')
   const legislation_url=(form.legislation_url || '').trim(), questions_url=(form.questions_url || '').trim()
   if (!form.syllabus_topic_id) throw Error('Selecione a matéria e o assunto do edital.')
-  for (const material_url of [legislation_url,questions_url].filter(Boolean)) {
+  for (const link of [legislation_url,questions_url,material_url,...(form.goal_blocks || form.blocks || []).map(b => b.material_url)].filter(Boolean)) {
     let url
-    try { url = new URL(material_url) } catch { throw Error('Informe um link válido para o material.') }
+    try { url = new URL(link) } catch { throw Error('Informe um link válido para o material.') }
     if (!['https:', 'http:'].includes(url.protocol)) throw Error('Use um link começando com https:// ou http://.')
   }
   const activity_type = activityKey(form)
